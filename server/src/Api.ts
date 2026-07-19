@@ -11,6 +11,7 @@ import {
   NotFoundError,
   PausedError,
   QueueFullError,
+  RateLimitedError,
   SubmissionDetail,
   SubmitPayload,
   SubmitResult,
@@ -52,6 +53,7 @@ export class GoblinsApi extends HttpApi.make("goblins")
           .addError(AttemptLimitError, { status: 429 })
           .addError(PausedError, { status: 429 })
           .addError(QueueFullError, { status: 429 })
+          .addError(RateLimitedError, { status: 429 })
       )
       .add(
         HttpApiEndpoint.get("submission", "/api/submissions/:id")
@@ -78,6 +80,12 @@ export class GoblinsApi extends HttpApi.make("goblins")
           .setPath(Schema.Struct({ secret: Schema.String, problemId: Schema.String }))
           .setPayload(UpdateRubricPayload)
           .addSuccess(Schema.Struct({ ok: Schema.Boolean }))
+          .addError(NotFoundError, { status: 404 })
+      )
+      .add(
+        HttpApiEndpoint.post("regradeFailed", "/api/teacher/:secret/regrade-failed")
+          .setPath(Schema.Struct({ secret: Schema.String }))
+          .addSuccess(Schema.Struct({ requeued: Schema.Number }))
           .addError(NotFoundError, { status: 404 })
       )
   ) {}

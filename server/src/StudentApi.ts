@@ -1,7 +1,7 @@
-import { HttpApiBuilder } from "@effect/platform"
+import { HttpApiBuilder, HttpServerRequest } from "@effect/platform"
 import { SqlClient } from "@effect/sql"
-import { Effect, Schema } from "effect"
-import * as NodeFs from "node:fs"
+import { Effect, Either, Schema } from "effect"
+import * as NodeFsPromises from "node:fs/promises"
 import * as NodePath from "node:path"
 import { GoblinsApi } from "./Api.js"
 import { AppConfig } from "./Config.js"
@@ -11,12 +11,25 @@ import {
   InvalidImageError,
   NotFoundError,
   PausedError,
-  QueueFullError
+  QueueFullError,
+  RateLimitedError
 } from "./Domain.js"
 import { GradingQueue } from "./GradingQueue.js"
 import { newId } from "./Ids.js"
+import { SubmitRateLimit } from "./RateLimit.js"
 
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+
+/** SqlError buries driver detail in .cause — walk the chain for matching. */
+const errorText = (e: unknown): string => {
+  const parts: string[] = []
+  let cur: unknown = e
+  for (let i = 0; i < 5 && cur != null; i++) {
+    parts.push(String((cur as { message?: string }).message ?? cur))
+    cur = (cur as { cause?: unknown }).cause
+  }
+  return parts.join(" | ")
+}
 
 const studentSubmissions = (sql: SqlClient.SqlClient, studentId: string) =>
   sql`
@@ -84,35 +97,46 @@ export const StudentLive = HttpApiBuilder.group(GoblinsApi, "student", (handlers
           return yield* joined(ex.id as string, ex.name as string)
         }
 
-        // brand-new name, or mode === "new" (same name, different kid → suffix)
-        let finalName = name
-        if (ex !== undefined) {
-          for (let n = 2; ; n++) {
-            const candidate = `${name} (${n})`
-            const clash = yield* sql`
-              SELECT id FROM students WHERE assignment_id = ${assignmentId} AND name = ${candidate}`.pipe(
-              Effect.orDie
-            )
-            if (clash.length === 0) {
-              finalName = candidate
-              break
-            }
+        // Brand-new name, or mode === "new" (same name, different kid → suffix).
+        // Insert-with-retry: concurrent joins with the same candidate race on
+        // UNIQUE(assignment_id, name); loser advances to the next suffix (audit fix).
+        for (let n = ex !== undefined ? 2 : 1; n <= 50; n++) {
+          const candidate = ex !== undefined || n > 1 ? `${name} (${n})` : name
+          const studentId = yield* newId
+          const inserted = yield* sql`
+            INSERT INTO students (id, assignment_id, name)
+            VALUES (${studentId}, ${assignmentId}, ${candidate})`.pipe(Effect.either)
+          if (Either.isRight(inserted)) {
+            return yield* joined(studentId, candidate)
+          }
+          const msg = errorText(inserted.left)
+          if (!msg.includes("UNIQUE")) {
+            return yield* Effect.die(inserted.left)
+          }
+          if (payload.mode === undefined) {
+            // raced with an identical first-time join — treat like nameTaken
+            return { kind: "nameTaken" as const, startedMinutesAgo: 0 }
           }
         }
-        const studentId = yield* newId
-        yield* sql`
-          INSERT INTO students (id, assignment_id, name)
-          VALUES (${studentId}, ${assignmentId}, ${finalName})`.pipe(Effect.orDie)
-        return yield* joined(studentId, finalName)
+        return yield* Effect.die(new Error("could not allocate a unique student name"))
       })
     )
     .handle("submit", ({ payload }) =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient
         const queue = yield* GradingQueue
+        const limiter = yield* SubmitRateLimit
+        const request = yield* HttpServerRequest.HttpServerRequest
         const attemptCap = yield* AppConfig.attemptCap.pipe(Effect.orDie)
         const dailyCap = yield* AppConfig.dailySubmissionCap.pipe(Effect.orDie)
         const dataDir = yield* AppConfig.dataDir.pipe(Effect.orDie)
+
+        // per-IP budget protection (Fly puts the client IP in fly-client-ip)
+        const headers = request.headers as Record<string, string | undefined>
+        const ip = headers["fly-client-ip"] ?? headers["x-forwarded-for"]?.split(",")[0]?.trim() ?? "local"
+        if (!(yield* limiter.allow(ip))) {
+          return yield* new RateLimitedError({ message: "Whoa, slow down a little — try again in a minute" })
+        }
 
         // student + problem must belong together
         const rows = yield* sql`
@@ -134,12 +158,11 @@ export const StudentLive = HttpApiBuilder.group(GoblinsApi, "student", (handlers
           })
         }
 
-        // attempt cap per student+problem
+        // fast-path attempt check (authoritative check is the atomic INSERT below)
         const attempts = yield* sql`
           SELECT COALESCE(MAX(attempt), 0) AS a FROM submissions
           WHERE student_id = ${payload.studentId} AND problem_id = ${payload.problemId}`.pipe(Effect.orDie)
-        const attempt = (((attempts[0]?.a as number) ?? 0) + 1)
-        if (attempt > attemptCap) {
+        if (((attempts[0]?.a as number) ?? 0) >= attemptCap) {
           return yield* new AttemptLimitError({
             message: `You've used all ${attemptCap} tries for this problem — move on to the next one!`
           })
@@ -153,30 +176,46 @@ export const StudentLive = HttpApiBuilder.group(GoblinsApi, "student", (handlers
 
         const submissionId = yield* newId
         const imagePath = NodePath.join(dataDir, "images", `${submissionId}.png`)
-        yield* Effect.try({
-          try: () => NodeFs.writeFileSync(imagePath, buf),
+        const removeImage = Effect.promise(() => NodeFsPromises.unlink(imagePath).catch(() => {}))
+        yield* Effect.tryPromise({
+          try: () => NodeFsPromises.writeFile(imagePath, buf),
           catch: () => new InvalidImageError({ message: "Could not store the image, try again" })
         })
 
+        // Atomic attempt allocation: SQLite serializes writers, so the
+        // MAX(attempt)+1 inside the INSERT can't race; HAVING re-enforces the
+        // cap under concurrency (audit fix — two rapid taps can't both slip in
+        // past the cap or collide on UNIQUE(student, problem, attempt)).
         yield* sql`
           INSERT INTO submissions (id, student_id, problem_id, attempt, status, image_path)
-          VALUES (${submissionId}, ${payload.studentId}, ${payload.problemId}, ${attempt}, 'queued', ${imagePath})`.pipe(
-          Effect.orDie
-        )
+          SELECT ${submissionId}, ${payload.studentId}, ${payload.problemId},
+                 COALESCE(MAX(attempt), 0) + 1, 'queued', ${imagePath}
+          FROM submissions
+          WHERE student_id = ${payload.studentId} AND problem_id = ${payload.problemId}
+          HAVING COALESCE(MAX(attempt), 0) < ${attemptCap}`.pipe(Effect.orDie)
+        const inserted = yield* sql`
+          SELECT attempt FROM submissions WHERE id = ${submissionId}`.pipe(Effect.orDie)
+        const attemptRow = inserted[0]
+        if (attemptRow === undefined) {
+          yield* removeImage
+          return yield* new AttemptLimitError({
+            message: `You've used all ${attemptCap} tries for this problem — move on to the next one!`
+          })
+        }
 
         const accepted = yield* queue.enqueue(submissionId)
         if (!accepted) {
-          // shed cleanly: the submission was never accepted, so it doesn't
-          // consume an attempt and doesn't count toward lost_submissions
+          // shed cleanly: never accepted → doesn't consume an attempt,
+          // doesn't count toward lost_submissions
           yield* sql`DELETE FROM submissions WHERE id = ${submissionId}`.pipe(Effect.ignore)
-          yield* Effect.sync(() => NodeFs.unlinkSync(imagePath)).pipe(Effect.ignore)
+          yield* removeImage
           return yield* new QueueFullError({
             message: "The goblins are swamped — try again in a few seconds",
             retryAfterSeconds: 8
           })
         }
 
-        return { submissionId, attempt }
+        return { submissionId, attempt: attemptRow.attempt as number }
       })
     )
     .handle("submission", ({ path }) =>

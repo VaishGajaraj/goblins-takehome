@@ -174,3 +174,7 @@ export class PausedError extends Schema.TaggedError<PausedError>()("PausedError"
 export class InvalidImageError extends Schema.TaggedError<InvalidImageError>()("InvalidImageError", {
   message: Schema.String
 }) {}
+
+export class RateLimitedError extends Schema.TaggedError<RateLimitedError>()("RateLimitedError", {
+  message: Schema.String
+}) {}

@@ -1,6 +1,6 @@
 import { Context, Effect, Layer, Option, Redacted, Schema } from "effect"
 import * as NodeCrypto from "node:crypto"
-import * as NodeFs from "node:fs"
+import * as NodeFsPromises from "node:fs/promises"
 import { AppConfig } from "./Config.js"
 import type { Rubric } from "./Domain.js"
 
@@ -140,7 +140,7 @@ export const makeRealGrade =
   (input: GradeInput): Effect.Effect<GradeResult, GraderError> =>
     Effect.tryPromise({
       try: async () => {
-        const png = NodeFs.readFileSync(input.imagePath)
+        const png = await NodeFsPromises.readFile(input.imagePath)
         const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
           headers: {

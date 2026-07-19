@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useParams } from "react-router-dom"
 import {
   getTeacherView,
+  regradeFailed,
   updateRubric,
   type Rubric,
   type SubmissionSummary,
@@ -167,7 +168,18 @@ export function TeacherPage() {
       </div>
 
       <div className="card">
-        <h2>Class report</h2>
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <h2>Class report</h2>
+          {view.submissions.some((s) => s.status === "failed") && (
+            <button
+              className="subtle"
+              onClick={() => void regradeFailed(secret).then(() => refresh())}
+              title="Failed grades get re-queued (each regrade is a model call)"
+            >
+              Regrade {view.submissions.filter((s) => s.status === "failed").length} failed
+            </button>
+          )}
+        </div>
         {view.students.length === 0 ? (
           <div className="empty">
             <span className="mascot">🧌</span>

@@ -53,7 +53,7 @@ React/Vite SPA ──HTTP──> Effect HttpApi server ──> SQLite (Fly volum
 
 Submission flow is **accept-and-enqueue**: validate, persist, return 202 + submission id; client polls `GET /submissions/:id`. This absorbs spikes, enables the zero-lost-submissions SLO, and gives the student a fun "goblin is grading…" beat. Same code path for fake and real graders — load tests exercise everything except the paid call.
 
-**Durability (audit fix):** SQLite is the source of truth for job state (`queued|grading|graded|failed`); the in-memory queue is only a dispatcher. On boot, pending rows are re-enqueued — so a deploy or crash mid-spike loses nothing, which is what makes `lost_submissions == 0` an honest claim and squares with the brief's "everything persists." Submissions carry an idempotency key (`student+problem+attempt`) so double-taps and client retries don't double-grade (or double-bill). PNGs are written to the volume as files; SQLite keeps paths + metadata (keeps DB small, payloads streamable).
+**Durability (audit fix):** SQLite is the source of truth for job state (`queued|grading|graded|failed`); the in-memory queue is only a dispatcher. On boot, workers start first, then pending rows re-enqueue via a waiting offer (backlogs larger than queue capacity trickle in instead of dropping) — so a deploy or crash mid-spike loses nothing, which is what makes `lost_submissions == 0` an honest claim and squares with the brief's "everything persists." Attempt numbers are allocated atomically inside the INSERT (SQLite single-writer + HAVING re-check), so concurrent double-taps can't collide on `UNIQUE(student, problem, attempt)` or slip past the attempt cap; rapid duplicate submits are bounded by that cap and the disabled submit button. PNGs are written to the volume as files; SQLite keeps paths + metadata (keeps DB small, payloads streamable).
 
 ## Part 1 — product slice
 
@@ -108,7 +108,7 @@ Submission flow is **accept-and-enqueue**: validate, persist, return 202 + submi
 
 **Name collisions:** joining with an existing name = resume (that's the persistence feature), so second-Alex needs disambiguation — join screen shows "Is this you? (started 10 min ago)" with a "No, I'm a different Alex" path that appends a suffix. Cheap fix for a real classroom fact.
 
-**Grading failure UX:** after retries exhaust, student sees "The goblin needs another look — keep going!" and auto-advances; teacher report shows a needs-review flag; failed jobs re-enter the queue on boot/interval. Nobody stares at a stuck spinner.
+**Grading failure UX:** after retries exhaust, student sees "The goblin needs another look — keep going!" and auto-advances; teacher report shows a needs-review flag plus a **"Regrade N failed" button** (teacher-initiated requeue, so the repeat model spend is a deliberate choice). Nobody stares at a stuck spinner.
 
 **App-side observability:** a tiny `/metrics` JSON (queue depth, in-flight, graded/failed/shed counters, grade-latency snapshot) via Effect Metric. k6 sees the outside; this sees the inside — the herd-recovery claim in the writeup gets a queue-depth trace, not vibes.
 
@@ -142,6 +142,10 @@ Re-audited against the canonical Notion brief (text confirmed identical to the o
 ## Audit log (round 3, 2026-07-19)
 
 Prompted by the "what other databases?" question. Added: alternatives-considered section with current free-tier/state facts (Turso pivot, Neon cold starts, Supabase pause, Fly MPG, D1, Upstash) and the driver-swap migration path; SQLite operational specifics (WAL, busy_timeout, volume snapshots, Litestream); PNG downscale cap tying cost + payload realism together; and — the biggest catch — a **mini golden-set accuracy eval**, since the brief explicitly poses "how accurate is the auto grader w/ cheaper models?" and rounds 1–2 only answered the infra half. Eval lands in milestone 6 alongside the smoke test (<$0.10 of the key).
+
+## Audit log (round 5, 2026-07-19 — post-M3 code audit)
+
+Fresh-context subagent reviewed the built pipeline against this plan. Two must-fix findings, both real: (1) **attempt-number race** — SELECT-then-INSERT could 500 on concurrent double-taps and quietly broke the idempotency claim; now allocated atomically in the INSERT with a HAVING cap re-check (verified: 6 concurrent submits → attempts exactly 1,2,3, zero 500s). (2) **boot-requeue overflow** — backlogs beyond queue capacity were silently dropped into forever-'queued'; workers now start before a waiting-offer requeue loop. Also fixed: sync fs on hot paths → async (would have skewed load-test p95s), QueueFull auto-retry timer leak + stale closure in WorkPage, concurrent same-name join race (verified 4×200 with clean suffixes; required walking SqlError.cause for UNIQUE detection), createAssignment made transactional, per-IP submit rate limit added (closing the last unimplemented hardening promise), and a teacher "Regrade failed" endpoint+button replacing the vaguer boot/interval promise. Deliberately accepted: daily-cap check-then-insert overshoot window (harmless), teacher-secret-in-URL model (documented tradeoff).
 
 ## Audit log (round 4, 2026-07-19)
 

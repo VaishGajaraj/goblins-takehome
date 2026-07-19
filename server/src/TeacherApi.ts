@@ -3,6 +3,7 @@ import { SqlClient } from "@effect/sql"
 import { Effect, Schema } from "effect"
 import { GoblinsApi } from "./Api.js"
 import { NotFoundError, Rubric } from "./Domain.js"
+import { GradingQueue } from "./GradingQueue.js"
 import { newId, newJoinCode, newSecret } from "./Ids.js"
 import { RubricGen } from "./RubricGen.js"
 
@@ -29,17 +30,22 @@ export const TeacherLive = HttpApiBuilder.group(GoblinsApi, "teacher", (handlers
         const joinCode = yield* newJoinCode
         const teacherSecret = yield* newSecret
 
-        yield* sql`
-          INSERT INTO assignments (id, title, join_code, teacher_secret)
-          VALUES (${assignmentId}, ${payload.title}, ${joinCode}, ${teacherSecret})`
-        for (let i = 0; i < payload.problems.length; i++) {
-          const p = payload.problems[i]!
-          const problemId = yield* newId
-          yield* sql`
-            INSERT INTO problems (id, assignment_id, position, statement, max_points, rubric)
-            VALUES (${problemId}, ${assignmentId}, ${i}, ${p.statement}, ${p.maxPoints},
-                    ${JSON.stringify(rubrics[i] ?? [])})`
-        }
+        // transactional: no half-created assignments behind a live join code (audit fix)
+        yield* sql.withTransaction(
+          Effect.gen(function* () {
+            yield* sql`
+              INSERT INTO assignments (id, title, join_code, teacher_secret)
+              VALUES (${assignmentId}, ${payload.title}, ${joinCode}, ${teacherSecret})`
+            for (let i = 0; i < payload.problems.length; i++) {
+              const p = payload.problems[i]!
+              const problemId = yield* newId
+              yield* sql`
+                INSERT INTO problems (id, assignment_id, position, statement, max_points, rubric)
+                VALUES (${problemId}, ${assignmentId}, ${i}, ${p.statement}, ${p.maxPoints},
+                        ${JSON.stringify(rubrics[i] ?? [])})`
+            }
+          })
+        )
 
         return { id: assignmentId, joinCode, teacherSecret }
       }).pipe(Effect.orDie)
@@ -114,6 +120,32 @@ export const TeacherLive = HttpApiBuilder.group(GoblinsApi, "teacher", (handlers
           UPDATE problems SET rubric = ${JSON.stringify(payload.rubric)}
           WHERE id = ${path.problemId}`.pipe(Effect.orDie)
         return { ok: true }
+      })
+    )
+    .handle("regradeFailed", ({ path }) =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient
+        const queue = yield* GradingQueue
+        const assignments = yield* sql`
+          SELECT id FROM assignments WHERE teacher_secret = ${path.secret}`.pipe(Effect.orDie)
+        const a = assignments[0]
+        if (a === undefined) {
+          return yield* new NotFoundError({ message: "No assignment for that link" })
+        }
+        const failed = yield* sql`
+          SELECT s.id FROM submissions s
+          JOIN students st ON st.id = s.student_id
+          WHERE st.assignment_id = ${a.id} AND s.status = 'failed'`.pipe(Effect.orDie)
+        const ids = failed.map((r) => r.id as string)
+        if (ids.length > 0) {
+          yield* sql`
+            UPDATE submissions SET status = 'queued', error = NULL
+            WHERE id IN ${sql.in(ids)}`.pipe(Effect.orDie)
+          // teacher-initiated, off the hot path → waiting enqueue, forked so
+          // the response returns immediately
+          yield* Effect.forkDaemon(Effect.forEach(ids, queue.enqueueWait, { discard: true }))
+        }
+        return { requeued: ids.length }
       })
     )
 )

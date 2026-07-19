@@ -61,6 +61,11 @@ export const createAssignment = (payload: { title: string; problems: ProblemInpu
 export const getTeacherView = (secret: string) =>
   request<TeacherView>(`/api/teacher/${encodeURIComponent(secret)}`)
 
+export const regradeFailed = (secret: string) =>
+  request<{ requeued: number }>(`/api/teacher/${encodeURIComponent(secret)}/regrade-failed`, {
+    method: "POST"
+  })
+
 export const updateRubric = (secret: string, problemId: string, rubric: Rubric) =>
   request<{ ok: boolean }>(
     `/api/teacher/${encodeURIComponent(secret)}/problems/${encodeURIComponent(problemId)}/rubric`,

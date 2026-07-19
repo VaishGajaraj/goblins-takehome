@@ -40,7 +40,20 @@ export function WorkPage() {
   const [notice, setNotice] = useState<string | null>(null)
   const [totals, setTotals] = useState<Map<string, SubmissionForStudent>>(new Map())
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // always points at the latest submit closure — the QueueFull auto-retry uses
+  // this so it never fires a stale submit (audit fix)
+  const submitRef = useRef<() => Promise<void>>(async () => {})
   const waitLine = useMemo(() => GOBLIN_WAIT_LINES[Math.floor(Math.random() * GOBLIN_WAIT_LINES.length)], [phase.kind])
+
+  // zombie-timer guard: navigating away must cancel any pending auto-retry (audit fix)
+  useEffect(
+    () => () => {
+      if (retryTimer.current) clearTimeout(retryTimer.current)
+      if (pollTimer.current) clearTimeout(pollTimer.current)
+    },
+    []
+  )
 
   const ATTEMPT_CAP = 3
 
@@ -144,7 +157,10 @@ export function WorkPage() {
   }, [phase.kind === "waiting" ? (phase as { submissionId: string }).submissionId : ""])
 
   const submit = async () => {
-    if (phase.kind !== "drawing" || !board || !joined) return
+    if (phase.kind !== "drawing" || !board || !joined) {
+      setSubmitting(false) // a queued auto-retry may land after the phase moved on
+      return
+    }
     setSubmitting(true)
     setNotice(null)
     const stored = storedStudent.get(code.toUpperCase())
@@ -167,14 +183,14 @@ export function WorkPage() {
     } catch (e) {
       if (e instanceof ApiError && e.tag === "QueueFullError") {
         setNotice("The goblins are swamped right now — hang on, retrying in a few seconds…")
-        setTimeout(() => {
+        retryTimer.current = setTimeout(() => {
           setNotice(null)
-          void submit()
+          void submitRef.current()
         }, 8000)
         return // keep submitting=true so the button stays disabled during auto-retry
-      } else if (e instanceof ApiError && e.tag === "AttemptLimitError") {
+      } else if (e instanceof ApiError && (e.tag === "AttemptLimitError" || e.tag === "RateLimitedError")) {
         setNotice(e.message)
-        if (joined) setPhase(nextProblemAfter(phase.problem))
+        if (joined && e.tag === "AttemptLimitError") setPhase(nextProblemAfter(phase.problem))
       } else if (e instanceof ApiError && e.tag === "PausedError") {
         setNotice(e.message)
       } else {
@@ -185,6 +201,7 @@ export function WorkPage() {
     }
     setSubmitting(false)
   }
+  submitRef.current = submit
 
   const nextProblemAfter = (current: ProblemForStudent): Phase => {
     if (!joined) return { kind: "done" }

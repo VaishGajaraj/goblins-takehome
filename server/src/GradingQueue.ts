@@ -15,6 +15,8 @@ export class GradingQueue extends Context.Tag("GradingQueue")<
   {
     /** false = queue full → caller sheds with 429. */
     readonly enqueue: (submissionId: string) => Effect.Effect<boolean>
+    /** Waits for space instead of dropping — for requeue/regrade paths, not the hot submit path. */
+    readonly enqueueWait: (submissionId: string) => Effect.Effect<void>
     readonly size: Effect.Effect<number>
     readonly capacity: number
   }
@@ -85,15 +87,8 @@ export const GradingQueueLive = Layer.scoped(
         )
       )
 
-    // Boot recovery: anything queued or mid-flight when the process died.
-    const pending = yield* sql`
-      SELECT id FROM submissions WHERE status IN ('queued', 'grading') ORDER BY created_at`
-    if (pending.length > 0) {
-      yield* Effect.logInfo(`requeueing ${pending.length} pending submission(s) from previous run`)
-      yield* Effect.forEach(pending, (r) => Queue.offer(queue, r.id as string), { discard: true })
-    }
-
-    // Worker pool.
+    // Workers FIRST — so boot requeue below can rely on the queue draining
+    // even when the backlog exceeds queue capacity (audit fix).
     yield* Stream.fromQueue(queue).pipe(
       Stream.mapEffect(gradeOne, { concurrency }),
       Stream.runDrain,
@@ -101,8 +96,27 @@ export const GradingQueueLive = Layer.scoped(
     )
     yield* Effect.logInfo(`grading workers up: concurrency=${concurrency}, queueCapacity=${capacity}`)
 
+    /** Offer that waits for space instead of dropping (used off the hot path). */
+    const enqueueWait = (id: string) =>
+      Queue.offer(queue, id).pipe(
+        Effect.repeat({ schedule: Schedule.spaced("500 millis"), until: (accepted) => accepted }),
+        Effect.asVoid
+      )
+
+    // Boot recovery: anything queued or mid-flight when the process died.
+    // Forked so a large backlog trickles in while HTTP starts serving.
+    yield* Effect.gen(function* () {
+      const pending = yield* sql`
+        SELECT id FROM submissions WHERE status IN ('queued', 'grading') ORDER BY created_at`
+      if (pending.length > 0) {
+        yield* Effect.logInfo(`requeueing ${pending.length} pending submission(s) from previous run`)
+        yield* Effect.forEach(pending, (r) => enqueueWait(r.id as string), { discard: true })
+      }
+    }).pipe(Effect.forkScoped)
+
     return {
       enqueue: (id: string) => Queue.offer(queue, id),
+      enqueueWait,
       // Queue.size is negative when takers are parked waiting — clamp for reporting
       size: Queue.size(queue).pipe(Effect.map((n) => Math.max(0, n))),
       capacity
