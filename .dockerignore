@@ -1,0 +1,10 @@
+node_modules
+*/node_modules
+server/dist
+client/dist
+data
+.env
+.env.*
+.git
+*.md
+loadtest

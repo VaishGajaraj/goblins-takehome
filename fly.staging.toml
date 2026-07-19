@@ -1,0 +1,32 @@
+# Staging app — the load-test target. Identical to prod except the grader
+# backend is fake (lognormal latency, injected failures) so k6 runs are free.
+# Deploy: fly deploy -c fly.staging.toml
+app = "goblins-grader-staging"
+primary_region = "iad"
+
+[build]
+
+[env]
+  DATA_DIR = "/data"
+  STATIC_DIR = "/app/client/dist"
+  GRADER_BACKEND = "fake"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 400
+    hard_limit = 1000
+
+[mounts]
+  source = "goblins_data_staging"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

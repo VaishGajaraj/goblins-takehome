@@ -1,0 +1,13 @@
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #faf7f2;
+  color: #2a2620;
+}
