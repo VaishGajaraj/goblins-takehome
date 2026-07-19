@@ -13,5 +13,17 @@ export const AppConfig = {
   model: Config.string("OPENROUTER_MODEL").pipe(Config.withDefault("google/gemini-3-flash-preview")),
   fallbackModel: Config.string("OPENROUTER_FALLBACK_MODEL").pipe(
     Config.withDefault("google/gemini-2.5-flash-lite")
-  )
+  ),
+  /** Grading worker pool size ≈ throughput knob (throughput = concurrency / avg latency). */
+  graderConcurrency: Config.integer("GRADER_CONCURRENCY").pipe(Config.withDefault(8)),
+  /** Bounded dispatch queue; when full, submissions are shed with 429. */
+  queueCapacity: Config.integer("QUEUE_CAPACITY").pipe(Config.withDefault(200)),
+  /** Max attempts per student per problem (budget protection). */
+  attemptCap: Config.integer("ATTEMPT_CAP").pipe(Config.withDefault(3)),
+  /** Daily kill switch: max submissions accepted per UTC day. */
+  dailySubmissionCap: Config.integer("DAILY_SUBMISSION_CAP").pipe(Config.withDefault(2000)),
+  /** Fake grader latency model (lognormal) + failure injection — mirrors real model behavior. */
+  fakeMedianMs: Config.integer("FAKE_GRADER_MEDIAN_MS").pipe(Config.withDefault(1800)),
+  fakeSigma: Config.number("FAKE_GRADER_SIGMA").pipe(Config.withDefault(0.6)),
+  fakeErrorRate: Config.number("FAKE_GRADER_ERROR_RATE").pipe(Config.withDefault(0.02))
 }

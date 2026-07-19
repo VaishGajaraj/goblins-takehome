@@ -1,8 +1,9 @@
 import { BrowserRouter, Link, Route, Routes } from "react-router-dom"
 import { CreateAssignment } from "./pages/CreateAssignment"
-import { JoinPlaceholder } from "./pages/JoinPlaceholder"
+import { JoinPage } from "./pages/JoinPage"
 import { Landing } from "./pages/Landing"
 import { TeacherPage } from "./pages/TeacherPage"
+import { WorkPage } from "./pages/WorkPage"
 
 export function App() {
   return (
@@ -16,7 +17,8 @@ export function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/new" element={<CreateAssignment />} />
           <Route path="/t/:secret" element={<TeacherPage />} />
-          <Route path="/join/:code" element={<JoinPlaceholder />} />
+          <Route path="/join/:code" element={<JoinPage />} />
+          <Route path="/work/:code" element={<WorkPage />} />
         </Routes>
       </div>
     </BrowserRouter>

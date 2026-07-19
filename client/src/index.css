@@ -128,3 +128,9 @@ table.report td.num { font-variant-numeric: tabular-nums; }
   background: var(--green-soft); border-radius: var(--radius);
 }
 .cta-footer a { color: var(--green-dark); font-weight: 700; }
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(-6deg); }
+  50% { transform: rotate(6deg); }
+}
+.wiggle { display: inline-block; animation: wiggle 0.9s ease-in-out infinite; }

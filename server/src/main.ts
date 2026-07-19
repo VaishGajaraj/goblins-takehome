@@ -8,27 +8,39 @@ import * as NodePath from "node:path"
 import { GoblinsApi } from "./Api.js"
 import { AppConfig } from "./Config.js"
 import { DbLive } from "./Db.js"
+import { GraderLive } from "./Grader.js"
+import { GradingQueue, GradingQueueLive, metricsSnapshot } from "./GradingQueue.js"
 import { RubricGenLive } from "./RubricGen.js"
+import { StudentLive } from "./StudentApi.js"
 import { TeacherLive } from "./TeacherApi.js"
 
 // ---------- handlers ----------
 
 const SystemLive = HttpApiBuilder.group(GoblinsApi, "system", (handlers) =>
-  handlers.handle("health", () =>
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient
-      const rows = yield* sql`SELECT 1 AS one`
-      const backend = yield* AppConfig.graderBackend
-      return { ok: true, db: rows.length === 1, backend }
-    }).pipe(Effect.orDie)
-  )
+  handlers
+    .handle("health", () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient
+        const rows = yield* sql`SELECT 1 AS one`
+        const backend = yield* AppConfig.graderBackend
+        return { ok: true, db: rows.length === 1, backend }
+      }).pipe(Effect.orDie)
+    )
+    .handle("metrics", () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient
+        const queue = yield* GradingQueue
+        const size = yield* queue.size
+        return yield* metricsSnapshot(sql, size, queue.capacity)
+      }).pipe(Effect.orDie)
+    )
 )
 
 // ---------- routes: API + SPA static fallback ----------
 
 const ApiRoutes = HttpLayerRouter.addHttpApi(GoblinsApi, {
   openapiPath: "/api/openapi.json"
-}).pipe(Layer.provide(Layer.mergeAll(SystemLive, TeacherLive)))
+}).pipe(Layer.provide(Layer.mergeAll(SystemLive, TeacherLive, StudentLive)))
 
 /**
  * Serve built client assets; unknown non-API GET paths fall back to
@@ -71,6 +83,8 @@ const HttpLive = Layer.unwrapEffect(
 )
 
 const MainLive = HttpLive.pipe(
+  Layer.provide(GradingQueueLive),
+  Layer.provide(GraderLive),
   Layer.provide(RubricGenLive),
   Layer.provide(DbLive),
   Layer.provide(NodeContext.layer)
