@@ -8,6 +8,8 @@ import * as NodePath from "node:path"
 import { GoblinsApi } from "./Api.js"
 import { AppConfig } from "./Config.js"
 import { DbLive } from "./Db.js"
+import { RubricGenLive } from "./RubricGen.js"
+import { TeacherLive } from "./TeacherApi.js"
 
 // ---------- handlers ----------
 
@@ -26,7 +28,7 @@ const SystemLive = HttpApiBuilder.group(GoblinsApi, "system", (handlers) =>
 
 const ApiRoutes = HttpLayerRouter.addHttpApi(GoblinsApi, {
   openapiPath: "/api/openapi.json"
-}).pipe(Layer.provide(SystemLive))
+}).pipe(Layer.provide(Layer.mergeAll(SystemLive, TeacherLive)))
 
 /**
  * Serve built client assets; unknown non-API GET paths fall back to
@@ -69,6 +71,7 @@ const HttpLive = Layer.unwrapEffect(
 )
 
 const MainLive = HttpLive.pipe(
+  Layer.provide(RubricGenLive),
   Layer.provide(DbLive),
   Layer.provide(NodeContext.layer)
 )

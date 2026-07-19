@@ -1,19 +1,24 @@
-import { useEffect, useState } from "react"
+import { BrowserRouter, Link, Route, Routes } from "react-router-dom"
+import { CreateAssignment } from "./pages/CreateAssignment"
+import { JoinPlaceholder } from "./pages/JoinPlaceholder"
+import { Landing } from "./pages/Landing"
+import { TeacherPage } from "./pages/TeacherPage"
 
 export function App() {
-  const [health, setHealth] = useState<string>("checking…")
-
-  useEffect(() => {
-    fetch("/api/health")
-      .then((r) => r.json())
-      .then((d) => setHealth(JSON.stringify(d)))
-      .catch((e) => setHealth(`unreachable: ${e}`))
-  }, [])
-
   return (
-    <main style={{ fontFamily: "system-ui", padding: "2rem" }}>
-      <h1>Goblins Grader</h1>
-      <p>Scaffold shell. Server health: <code>{health}</code></p>
-    </main>
+    <BrowserRouter>
+      <div className="shell">
+        <nav className="topbar">
+          <span className="mascot" aria-hidden>🧌</span>
+          <Link to="/">Goblins Grader</Link>
+        </nav>
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/new" element={<CreateAssignment />} />
+          <Route path="/t/:secret" element={<TeacherPage />} />
+          <Route path="/join/:code" element={<JoinPlaceholder />} />
+        </Routes>
+      </div>
+    </BrowserRouter>
   )
 }

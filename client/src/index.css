@@ -1,13 +1,130 @@
 :root {
   color-scheme: light;
+  --bg: #faf7f0;
+  --card: #ffffff;
+  --ink: #2a2620;
+  --ink-soft: #6b6459;
+  --green: #37714a;
+  --green-dark: #2a5a3a;
+  --green-soft: #e4efe7;
+  --amber: #e8a33d;
+  --amber-soft: #fdf3e0;
+  --red: #b3432b;
+  --red-soft: #fbe9e4;
+  --line: #e7e0d4;
+  --radius: 12px;
+  --shadow: 0 1px 3px rgba(42, 38, 32, 0.08), 0 4px 14px rgba(42, 38, 32, 0.06);
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
-  background: #faf7f2;
-  color: #2a2620;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
 }
+
+.shell { max-width: 880px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+
+.topbar {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.75rem 0 1.25rem;
+}
+.topbar a { color: var(--ink); text-decoration: none; font-weight: 700; font-size: 1.15rem; }
+.topbar .mascot { font-size: 1.5rem; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+h1 { font-size: 1.6rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.15rem; margin: 0 0 0.75rem; }
+p.soft, span.soft { color: var(--ink-soft); }
+
+button {
+  font: inherit;
+  border: none;
+  border-radius: 9px;
+  padding: 0.55rem 1rem;
+  cursor: pointer;
+  background: var(--green);
+  color: white;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+button:hover { background: var(--green-dark); }
+button:disabled { opacity: 0.45; cursor: default; }
+button.ghost {
+  background: transparent; color: var(--green);
+  border: 1.5px solid var(--green);
+}
+button.ghost:hover { background: var(--green-soft); }
+button.subtle { background: var(--green-soft); color: var(--green-dark); }
+button.danger-ghost { background: transparent; color: var(--red); border: none; padding: 0.3rem; }
+
+input[type="text"], input[type="number"], textarea {
+  font: inherit;
+  width: 100%;
+  border: 1.5px solid var(--line);
+  border-radius: 9px;
+  padding: 0.5rem 0.65rem;
+  background: white;
+  color: var(--ink);
+}
+input:focus, textarea:focus { outline: 2px solid var(--green); outline-offset: 0; border-color: var(--green); }
+textarea { resize: vertical; min-height: 3.2rem; }
+
+label { font-weight: 600; font-size: 0.9rem; display: block; margin-bottom: 0.25rem; }
+
+.row { display: flex; gap: 0.6rem; align-items: center; }
+.row.top { align-items: flex-start; }
+.grow { flex: 1; }
+.stack { display: flex; flex-direction: column; gap: 0.6rem; }
+
+.join-code {
+  font-size: 2.2rem; font-weight: 800; letter-spacing: 0.35rem;
+  background: var(--amber-soft); border: 2px dashed var(--amber);
+  padding: 0.5rem 1.2rem; border-radius: var(--radius); display: inline-block;
+}
+
+.badge {
+  display: inline-block; border-radius: 999px; padding: 0.1rem 0.6rem;
+  font-size: 0.78rem; font-weight: 700;
+}
+.badge.graded { background: var(--green-soft); color: var(--green-dark); }
+.badge.queued, .badge.grading { background: var(--amber-soft); color: #9a6b1e; }
+.badge.failed { background: var(--red-soft); color: var(--red); }
+
+table.report { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+table.report th, table.report td {
+  text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--line);
+}
+table.report th { color: var(--ink-soft); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+table.report td.num { font-variant-numeric: tabular-nums; }
+
+.rubric-row { display: grid; grid-template-columns: 1fr 84px 34px; gap: 0.5rem; align-items: center; }
+.points-sum { font-size: 0.85rem; }
+.points-sum.bad { color: var(--red); font-weight: 700; }
+
+.empty {
+  text-align: center; color: var(--ink-soft); padding: 2rem 1rem;
+}
+.empty .mascot { font-size: 2.4rem; display: block; margin-bottom: 0.4rem; }
+
+.error-banner {
+  background: var(--red-soft); color: var(--red);
+  border-radius: 9px; padding: 0.6rem 0.9rem; margin-bottom: 1rem; font-weight: 600;
+}
+
+.cta-footer {
+  margin-top: 2rem; text-align: center; padding: 1.25rem;
+  background: var(--green-soft); border-radius: var(--radius);
+}
+.cta-footer a { color: var(--green-dark); font-weight: 700; }

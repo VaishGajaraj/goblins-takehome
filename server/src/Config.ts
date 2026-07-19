@@ -9,5 +9,9 @@ export const AppConfig = {
   staticDir: Config.string("STATIC_DIR").pipe(Config.withDefault("../client/dist")),
   /** fake = deterministic latency-simulating grader (load tests); real = OpenRouter. */
   graderBackend: Config.string("GRADER_BACKEND").pipe(Config.withDefault("fake")),
-  openrouterApiKey: Config.option(Config.redacted("OPENROUTER_API_KEY"))
+  openrouterApiKey: Config.option(Config.redacted("OPENROUTER_API_KEY")),
+  model: Config.string("OPENROUTER_MODEL").pipe(Config.withDefault("google/gemini-3-flash-preview")),
+  fallbackModel: Config.string("OPENROUTER_FALLBACK_MODEL").pipe(
+    Config.withDefault("google/gemini-2.5-flash-lite")
+  )
 }
