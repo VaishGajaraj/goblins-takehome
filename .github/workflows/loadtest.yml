@@ -6,7 +6,7 @@ on:
       profile:
         description: "Load profile"
         type: choice
-        options: [smoke, short, full]
+        options: [smoke, short, full, shed]
         default: short
       base_url:
         description: "Target (must run GRADER_BACKEND=fake)"
