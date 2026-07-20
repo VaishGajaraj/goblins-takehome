@@ -1,0 +1,37 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which app(s)"
+        type: choice
+        options: [both, prod, staging]
+        default: both
+  push:
+    branches: [main]
+    paths: ["server/**", "client/**", "Dockerfile", "fly.toml", "fly.staging.toml", "package*.json"]
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  prod:
+    if: github.event_name == 'push' || inputs.target == 'both' || inputs.target == 'prod'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only --ha=false
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+  staging:
+    if: github.event_name == 'push' || inputs.target == 'both' || inputs.target == 'staging'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy -c fly.staging.toml --remote-only --ha=false
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
