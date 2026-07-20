@@ -11,8 +11,13 @@ export const AppConfig = {
   graderBackend: Config.string("GRADER_BACKEND").pipe(Config.withDefault("fake")),
   openrouterApiKey: Config.option(Config.redacted("OPENROUTER_API_KEY")),
   model: Config.string("OPENROUTER_MODEL").pipe(Config.withDefault("google/gemini-3-flash-preview")),
+  /**
+   * Failover model. NOT flash-lite: the golden-set eval (eval/results.json)
+   * showed it awards full marks to prompt-injection images. gpt-5-mini is
+   * slower (~10s) but graded correctly — right tradeoff for a rare failover.
+   */
   fallbackModel: Config.string("OPENROUTER_FALLBACK_MODEL").pipe(
-    Config.withDefault("google/gemini-2.5-flash-lite")
+    Config.withDefault("openai/gpt-5-mini")
   ),
   /** Grading worker pool size ≈ throughput knob (throughput = concurrency / avg latency). */
   graderConcurrency: Config.integer("GRADER_CONCURRENCY").pipe(Config.withDefault(8)),
