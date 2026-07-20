@@ -150,7 +150,10 @@ const PROFILES = {
     hasSteady: false,
     expectShed: true,
     scenarios: {
-      overload: herdScenario("0s", 25, 30, 800),
+      // maxVUs sized for the worst case: every accepted submission polls the
+      // full ~109s ladder while shed iterations churn — 800 proved too small
+      // (97 dropped iterations in the first staging run; the gate caught it).
+      overload: herdScenario("0s", 25, 30, 2000),
       observer: observerScenario("45s")
     }
   }
