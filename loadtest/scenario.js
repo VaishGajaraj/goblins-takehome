@@ -145,20 +145,25 @@ const PROFILES = {
       observer: observerScenario("31m30s")
     }
   },
-  // Deliberate overload: arrivals ≫ service rate so the bounded queue must
-  // fill and shed. Passing = sheds happen, every shed carries the retry hint,
-  // zero lost, zero 5xx, and the backlog still drains inside the budget.
+  // Deliberate overload: arrivals ≫ service rate (~10/s) so the bounded queue
+  // must fill and shed: (20-10)/s × 30s = 300 excess > 200 queue cap.
+  // Passing = sheds happen, every shed carries the retry hint, zero lost,
+  // zero 5xx, and the backlog still drains inside the budget.
+  //
+  // Why 20/s and not more: staging runs found the shared-cpu-1x box's ingest
+  // ceiling — at 25/s × 440KB payloads, CPU saturates parsing bodies before
+  // the queue is the constraint (submit p95 >10s, timeouts >1%). That ceiling
+  // is a documented WRITEUP finding; this profile tests queue shedding, so it
+  // runs just under it.
   shed: {
     students: 30,
     drainWaitS: 240,
     hasSteady: false,
     expectShed: true,
     scenarios: {
-      // Sized for the worst case: every accepted submission polls the full
-      // ~109s ladder while shed iterations churn. Fully pre-allocated —
-      // on-demand VU scaling during the spike is what dropped iterations in
-      // the first two staging runs (the dropped_iterations gate caught both).
-      overload: herdScenario("0s", 25, 30, 2000, 1200),
+      // Pre-allocated: on-demand VU scaling mid-spike dropped iterations in
+      // early staging runs (the dropped_iterations gate caught it).
+      overload: herdScenario("0s", 20, 30, 1500, 900),
       observer: observerScenario("45s")
     }
   }
