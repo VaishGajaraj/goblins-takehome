@@ -11,6 +11,9 @@
     "dev:client": "npm run dev -w client",
     "build": "npm run build -w client && npm run build -w server",
     "start": "node server/dist/main.js",
-    "typecheck": "npm run typecheck -w server && npm run typecheck -w client"
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w client",
+    "loadtest:smoke": "k6 run -e PROFILE=smoke loadtest/scenario.js",
+    "loadtest": "k6 run -e PROFILE=short loadtest/scenario.js",
+    "loadtest:full": "k6 run -e PROFILE=full loadtest/scenario.js"
   }
 }

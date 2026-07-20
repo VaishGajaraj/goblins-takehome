@@ -10,6 +10,17 @@ primary_region = "iad"
   DATA_DIR = "/data"
   STATIC_DIR = "/app/client/dist"
   GRADER_BACKEND = "fake"
+  # Fake grader mirrors real-model latency (lognormal median ~1.8s, tail ~10s)
+  FAKE_GRADER_MEDIAN_MS = "1800"
+  FAKE_GRADER_SIGMA = "0.6"
+  FAKE_GRADER_ERROR_RATE = "0.02"
+  # Capacity knob under test: throughput ≈ concurrency / avg grade latency
+  GRADER_CONCURRENCY = "20"
+  QUEUE_CAPACITY = "200"
+  # k6 runs from a single IP and must not trip per-IP/budget guards;
+  # prod keeps the strict defaults.
+  SUBMIT_RATE_PER_MIN = "1000000"
+  DAILY_SUBMISSION_CAP = "1000000"
 
 [http_service]
   internal_port = 3000

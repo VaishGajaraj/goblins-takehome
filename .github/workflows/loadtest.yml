@@ -1,0 +1,38 @@
+name: Load test
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Load profile"
+        type: choice
+        options: [smoke, short, full]
+        default: short
+      base_url:
+        description: "Target (must run GRADER_BACKEND=fake)"
+        default: "https://goblins-grader-staging.fly.dev"
+
+jobs:
+  k6:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: grafana/setup-k6-action@v1
+      - name: Run k6 (${{ inputs.profile }})
+        env:
+          K6_WEB_DASHBOARD: "true"
+          K6_WEB_DASHBOARD_EXPORT: "k6-report.html"
+        run: |
+          k6 run \
+            -e PROFILE=${{ inputs.profile }} \
+            -e BASE_URL=${{ inputs.base_url }} \
+            --summary-export k6-summary.json \
+            loadtest/scenario.js
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-${{ inputs.profile }}-report
+          path: |
+            k6-report.html
+            k6-summary.json

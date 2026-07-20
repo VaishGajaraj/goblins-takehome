@@ -88,7 +88,7 @@ Submission flow is **accept-and-enqueue**: validate, persist, return 202 + submi
 
 **Ship gates (k6 thresholds, non-zero exit on breach) — per scenario (audit fix):**
 - Steady-state (classes a/b/c): `submit p(95) < 500ms` · `http_req_failed rate < 1%` (429s tagged as shed, not failure) · `time_to_grade p(95) < 15s, p(99) < 45s` · `lost_submissions == 0`
-- Thundering herd: `lost_submissions == 0` · every shed request gets `429 + Retry-After` (no 500s/timeouts) · backlog fully drained within 3 min of the spike ending. Herd is pass/fail on *graceful degradation and recovery*, not latency.
+- Thundering herd: `lost_submissions == 0` · every shed request gets a 429 with a retry-after hint in the body (no 500s/timeouts) · backlog fully drained within 3 min of the spike ending (teardown check). Herd is pass/fail on *graceful degradation and recovery*, not latency.
 
 **Run modes:** (1) local Docker + fake grader — free iteration loop; (2) deployed **staging Fly app** (`GRADER_BACKEND=fake`) — the ship/no-ship run, HTML report artifact committed; prod keeps the real grader, so load tests never flip a flag on the live demo (audit fix); (3) optional tiny real-model smoke (~20 grades, <$0.05) to validate the fake's latency distribution. Re-running is one command — `npm run loadtest` (short CI profile) / `npm run loadtest:full` — because the brief's ask is literally "re-run that check as often as we like." Stretch: GitHub Action running the short profile on push.
 
