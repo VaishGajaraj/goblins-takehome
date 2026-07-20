@@ -21,6 +21,7 @@
 // teardownTimeout outlives the 3-min drain budget it measures.
 
 import { sleep } from "k6"
+import { SharedArray } from "k6/data"
 import encoding from "k6/encoding"
 import exec from "k6/execution"
 import http from "k6/http"
@@ -43,7 +44,10 @@ const rateLimited = new Counter("rate_limited") // 429 RateLimited/Paused (stagi
 const queueDepth = new Trend("queue_depth") // sampled from /api/metrics (inside view)
 const drainTimeout = new Counter("drain_timeout") // teardown: backlog not drained in budget
 
-const PNG_B64 = encoding.b64encode(open("./fixtures/work.png", "b"))
+// SharedArray: the 330KB payload is read+encoded ONCE and shared read-only
+// across all VUs. Without this, every on-demand VU init re-encodes the file —
+// an init storm that throttled arrivals in the first shed staging run.
+const PNG = new SharedArray("png", () => [encoding.b64encode(open("./fixtures/work.png", "b"))])
 
 // ---------- profiles ----------
 
@@ -64,14 +68,14 @@ const classScenario = (startTime, stages) => ({
   tags: { load: "steady" }
 })
 
-const herdScenario = (startTime, ratePerSec, seconds, maxVUs) => ({
+const herdScenario = (startTime, ratePerSec, seconds, maxVUs, preAllocatedVUs) => ({
   executor: "constant-arrival-rate",
   exec: "submitFlow",
   startTime,
   rate: ratePerSec,
   timeUnit: "1s",
   duration: `${seconds}s`,
-  preAllocatedVUs: Math.min(200, maxVUs),
+  preAllocatedVUs: preAllocatedVUs ?? Math.min(200, maxVUs),
   maxVUs, // must cover rate × poll-tail so k6 never throttles offered load
   gracefulStop: GRACEFUL_STOP,
   tags: { load: "herd" }
@@ -150,10 +154,11 @@ const PROFILES = {
     hasSteady: false,
     expectShed: true,
     scenarios: {
-      // maxVUs sized for the worst case: every accepted submission polls the
-      // full ~109s ladder while shed iterations churn — 800 proved too small
-      // (97 dropped iterations in the first staging run; the gate caught it).
-      overload: herdScenario("0s", 25, 30, 2000),
+      // Sized for the worst case: every accepted submission polls the full
+      // ~109s ladder while shed iterations churn. Fully pre-allocated —
+      // on-demand VU scaling during the spike is what dropped iterations in
+      // the first two staging runs (the dropped_iterations gate caught both).
+      overload: herdScenario("0s", 25, 30, 2000, 1200),
       observer: observerScenario("45s")
     }
   }
@@ -254,7 +259,7 @@ export function submitFlow(data) {
 
   const res = http.post(
     `${BASE}/api/submissions`,
-    JSON.stringify({ studentId, problemId, imageBase64: PNG_B64 }),
+    JSON.stringify({ studentId, problemId, imageBase64: PNG[0] }),
     { headers: jsonHeaders, tags: { endpoint: "submit" } }
   )
 
