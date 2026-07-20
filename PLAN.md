@@ -68,7 +68,7 @@ Submission flow is **accept-and-enqueue**: validate, persist, return 202 + submi
 
 **Product note:** "real-time feedback turned off" = no live help *while* the student works; the post-submit score in point 4 is explicitly in the brief. The whiteboard stays feedback-silent until submission.
 
-**Out (deliberate):** email/real auth, multi-class management, editing assignments after students start, images in problem statements, per-criterion partial-credit UI (rubric text carries it), accessibility beyond basics, mobile-teacher views. CSV export of grades is a maybe-if-time (teachers love it).
+**Out (deliberate):** email/real auth, multi-class management, editing assignments after students start, images in problem statements, per-criterion partial-credit UI (rubric text carries it), accessibility beyond basics, mobile-teacher views, regrading already-graded work after rubric edits (+ stale-rubric banner) — global "regrade failed" exists; rubric-edit-triggered regrade is a cost decision for real-product scope. CSV export of grades is a maybe-if-time (teachers love it).
 
 **Tone:** small goblin character in grading/waiting states; encouraging feedback wording ("show your work" praised, not just right/wrong). Cheap, high-leverage charm.
 
@@ -142,6 +142,10 @@ Re-audited against the canonical Notion brief (text confirmed identical to the o
 ## Audit log (round 3, 2026-07-19)
 
 Prompted by the "what other databases?" question. Added: alternatives-considered section with current free-tier/state facts (Turso pivot, Neon cold starts, Supabase pause, Fly MPG, D1, Upstash) and the driver-swap migration path; SQLite operational specifics (WAL, busy_timeout, volume snapshots, Litestream); PNG downscale cap tying cost + payload realism together; and — the biggest catch — a **mini golden-set accuracy eval**, since the brief explicitly poses "how accurate is the auto grader w/ cheaper models?" and rounds 1–2 only answered the infra half. Eval lands in milestone 6 alongside the smoke test (<$0.10 of the key).
+
+## Audit log (round 6, 2026-07-20 — post-M5 dual audit)
+
+Two parallel fresh-context audits: one on the k6 kit's honesty, one on repo ship-readiness. The k6 audit found three ways the test could lie, all fixed: (F1) k6's default 60s `teardownTimeout` would have killed the 3-min drain check as a spurious hard failure → 300s; (F2) random student/problem sampling collided with the app's own 3-attempt cap (~⅔ of full-profile herd would have bounced as AttemptLimit, quietly deflating offered load) → 10 problems + deterministic pair cycling with per-scenario offsets + `attempt_capped==0` gate; (F3) VU exhaustion only surfaces as `dropped_iterations`, which no gate watched → gate added + herd maxVUs sized to rate × poll-tail; plus `gracefulStop: 150s` so truncated tail polls can't leak past `lost_submissions==0`, and a new `shed` overload profile (25/s) because the standard herd never actually fills the queue — shedding was previously proven only ad-hoc. Ship-readiness audit: student finish-screen CTA was missing (added; teacher-side existed), `.env.example` added, `loadtarget` npm script fixes the port-3111 footgun; confirmed clean: secret hygiene (key nowhere outside untracked .env), Docker runtime-stage install simulated OK, lazy Excalidraw, empty states. Remaining gaps are all M6 scope and now on its checklist: root README, WRITEUP.md with measured numbers + committed report, seeded demo class, golden-set eval, deploy + GitHub handoff. Amended honestly: per-problem "regrade all" after rubric edits is **deferred** (global regrade-failed exists); stale-rubric banner deferred with it.
 
 ## Audit log (round 5, 2026-07-19 — post-M3 code audit)
 

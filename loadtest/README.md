@@ -11,16 +11,25 @@ stays on schedule even when grading slows — exactly what a classroom does.
 |---|---|---|---|
 | `smoke` | 2/s steady + 6/s herd blip | ~40s | CI sanity, script check |
 | `short` | 1 class at ~2× pace (ramp to 60/min) + 10/s×30s herd | ~4 min | **default ship gate** |
-| `full` | 3 classes staggered 5 min (ramp 15→25/min each) + 10/s×30s herd | ~32 min | the real testing-day shape |
+| `full` | 3 classes staggered 5 min (ramp 15→25/min each) + 10/s×30s herd | ~35 min | the real testing-day shape |
+| `shed` | deliberate overload: 25/s×30s (≫ ~10/s service rate) | ~5 min | proves graceful shedding + recovery |
+
+Harness honesty guards (each caught by an audit, see PLAN.md round 6):
+deterministic (student × problem) cycling so the app's 3-attempt cap can't
+silently eat load (`attempt_capped==0` gate) · `dropped_iterations==0` so k6
+provably offered the scheduled arrivals (no silent VU throttling) ·
+`gracefulStop: 150s` so tail polls reach terminal states and
+`lost_submissions` is exact · `teardownTimeout: 300s` outlives the 3-min drain
+budget the teardown measures.
 
 ## Running
 
 ```sh
-# local loop (free): term A
-GRADER_BACKEND=fake GRADER_CONCURRENCY=20 SUBMIT_RATE_PER_MIN=1000000 \
-DAILY_SUBMISSION_CAP=1000000 npm start
+# local loop (free): term A — server tuned as a load target (fake grader,
+# per-IP/daily guards off, PORT=3111 to match the k6 default)
+npm run build && npm run loadtarget
 # term B
-npm run loadtest              # short profile vs localhost:3111... set BASE_URL if needed
+npm run loadtest              # short | loadtest:smoke | loadtest:shed | loadtest:full
 
 # ship/no-ship run against deployed staging (fake grader, real infra):
 k6 run -e PROFILE=short -e BASE_URL=https://goblins-grader-staging.fly.dev loadtest/scenario.js

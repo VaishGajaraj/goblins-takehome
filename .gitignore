@@ -10,5 +10,7 @@ dist/
 *.db-wal
 *.db-shm
 data/
+data-loadtest/
 k6-report*.html
+!loadtest/results/*.html
 .DS_Store

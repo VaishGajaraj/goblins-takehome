@@ -12,8 +12,10 @@
     "build": "npm run build -w client && npm run build -w server",
     "start": "node server/dist/main.js",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w client",
+    "loadtarget": "PORT=3111 GRADER_BACKEND=fake FAKE_GRADER_MEDIAN_MS=1800 FAKE_GRADER_SIGMA=0.6 FAKE_GRADER_ERROR_RATE=0.02 GRADER_CONCURRENCY=20 SUBMIT_RATE_PER_MIN=1000000 DAILY_SUBMISSION_CAP=1000000 DATA_DIR=./data-loadtest node server/dist/main.js",
     "loadtest:smoke": "k6 run -e PROFILE=smoke loadtest/scenario.js",
     "loadtest": "k6 run -e PROFILE=short loadtest/scenario.js",
-    "loadtest:full": "k6 run -e PROFILE=full loadtest/scenario.js"
+    "loadtest:full": "k6 run -e PROFILE=full loadtest/scenario.js",
+    "loadtest:shed": "k6 run -e PROFILE=shed loadtest/scenario.js"
   }
 }

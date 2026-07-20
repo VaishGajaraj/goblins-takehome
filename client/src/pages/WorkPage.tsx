@@ -254,6 +254,13 @@ export function WorkPage() {
         <p className="soft">
           Every step you showed helps you learn. Ask your teacher about anything that surprised you!
         </p>
+        <div className="cta-footer">
+          Want a goblin that helps <em>while</em> you work?{" "}
+          <a href="https://goblinsapp.com" target="_blank" rel="noreferrer">
+            Ask your teacher about Goblins
+          </a>{" "}
+          — real-time feedback on every problem.
+        </div>
       </div>
     )
   }
