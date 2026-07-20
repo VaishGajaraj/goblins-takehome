@@ -44,10 +44,16 @@ const rateLimited = new Counter("rate_limited") // 429 RateLimited/Paused (stagi
 const queueDepth = new Trend("queue_depth") // sampled from /api/metrics (inside view)
 const drainTimeout = new Counter("drain_timeout") // teardown: backlog not drained in budget
 
-// SharedArray: the 330KB payload is read+encoded ONCE and shared read-only
-// across all VUs. Without this, every on-demand VU init re-encodes the file —
-// an init storm that throttled arrivals in the first shed staging run.
-const PNG = new SharedArray("png", () => [encoding.b64encode(open("./fixtures/work.png", "b"))])
+// SharedArray: payloads are read+encoded ONCE and shared read-only across all
+// VUs. Without this, every on-demand VU init re-encodes the file — an init
+// storm that throttled arrivals in the first shed staging run.
+// [0] = realistic 330KB whiteboard; [1] = light 47KB variant used by the shed
+// profile to isolate queue-overflow behavior from the (separately documented)
+// ingest-CPU ceiling of the target box.
+const PNG = new SharedArray("png", () => [
+  encoding.b64encode(open("./fixtures/work.png", "b")),
+  encoding.b64encode(open("./fixtures/work-small.png", "b"))
+])
 
 // ---------- profiles ----------
 
@@ -150,16 +156,16 @@ const PROFILES = {
   // Passing = sheds happen, every shed carries the retry hint, zero lost,
   // zero 5xx, and the backlog still drains inside the budget.
   //
-  // Why 20/s and not more: staging runs found the shared-cpu-1x box's ingest
-  // ceiling — at 25/s × 440KB payloads, CPU saturates parsing bodies before
-  // the queue is the constraint (submit p95 >10s, timeouts >1%). That ceiling
-  // is a documented WRITEUP finding; this profile tests queue shedding, so it
-  // runs just under it.
+  // Uses the light payload: staging runs established that sustained 440KB
+  // ingest CPU-saturates the shared-cpu-1x box at ~11-25/s (burst-credit
+  // dependent) BEFORE the queue overflows — a real, separately documented
+  // capacity finding (see WRITEUP). This profile isolates queue mechanics.
   shed: {
     students: 30,
     drainWaitS: 240,
     hasSteady: false,
     expectShed: true,
+    lightPayload: true,
     scenarios: {
       // Pre-allocated: on-demand VU scaling mid-spike dropped iterations in
       // early staging runs (the dropped_iterations gate caught it).
@@ -264,7 +270,7 @@ export function submitFlow(data) {
 
   const res = http.post(
     `${BASE}/api/submissions`,
-    JSON.stringify({ studentId, problemId, imageBase64: PNG[0] }),
+    JSON.stringify({ studentId, problemId, imageBase64: profile.lightPayload ? PNG[1] : PNG[0] }),
     { headers: jsonHeaders, tags: { endpoint: "submit" } }
   )
 
