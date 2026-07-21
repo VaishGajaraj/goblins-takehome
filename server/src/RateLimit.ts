@@ -41,7 +41,12 @@ export const SubmitRateLimitLive = Layer.effect(
   })
 )
 
-/** Join + class-lookup limiter — slows join-code enumeration. */
+/**
+ * Join + class-lookup + draft limiter — slows join-code enumeration.
+ * 240/min, not 60: a class joining at the bell from one school NAT IP is
+ * ~30 kids × (classInfo + join) = 60 requests inside a minute before any
+ * refreshes — the old default sat exactly at the legitimate peak.
+ */
 export class JoinRateLimit extends Context.Tag("JoinRateLimit")<
   JoinRateLimit,
   { readonly allow: (key: string) => Effect.Effect<boolean> }
@@ -50,7 +55,7 @@ export class JoinRateLimit extends Context.Tag("JoinRateLimit")<
 export const JoinRateLimitLive = Layer.effect(
   JoinRateLimit,
   Effect.gen(function* () {
-    const perMinute = yield* Config.integer("JOIN_RATE_PER_MIN").pipe(Config.withDefault(60))
+    const perMinute = yield* Config.integer("JOIN_RATE_PER_MIN").pipe(Config.withDefault(240))
     return { allow: makeWindowLimiter(perMinute) }
   })
 )
