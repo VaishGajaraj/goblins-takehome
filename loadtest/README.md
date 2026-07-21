@@ -51,6 +51,26 @@ load generator is one IP; prod keeps them strict). Herd: gated on graceful shed
 + **full backlog drain within 3 min** of the spike (checked in teardown), not
 on steady-state latency — absorbing then recovering is the design.
 
+## If a run fails
+
+Three failure modes are common and none of them mean the pipeline is broken:
+
+1. **"RateLimitedError: the target's per-IP/daily guards are on"** — you're
+   load-testing a server with production guards. Use `npm run loadtarget`
+   locally or point `BASE_URL` at staging. (The run aborts immediately with
+   this message rather than producing a confusing red result.)
+2. **A deploy rolled mid-run.** Pushes to main auto-deploy staging; the
+   machine replacement drops connections for a few seconds, which trips the
+   `http_req_failed` abort gate. Check the Actions "Deploy" workflow isn't
+   running, then rerun.
+3. **The setup preflight refuses the target** — either it's unreachable or
+   its grader backend is `real` (load-testing that spends model money;
+   override with `-e ALLOW_REAL=true` only on purpose).
+
+The red "Load test" runs from 2026-07-20 in the Actions history are kept on
+purpose: they're the harness-tuning iterations (VU init storm, undersized
+pools, the ingest-ceiling discovery) described in PLAN.md audit round 6.
+
 ## Why the model bill is $0
 
 The target runs `GRADER_BACKEND=fake`: same queue, workers, retries, DB writes,

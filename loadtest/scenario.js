@@ -223,6 +223,19 @@ export const options = {
 const jsonHeaders = { "Content-Type": "application/json" }
 
 export function setup() {
+  // Preflight: refuse silly targets loudly instead of failing cryptically.
+  const health = http.get(`${BASE}/api/health`, { tags: { endpoint: "setup" } })
+  if (health.status !== 200) {
+    throw new Error(`target unreachable: ${BASE} → ${health.status}. Is the server up?`)
+  }
+  const backend = health.json().backend
+  if (backend !== "fake" && __ENV.ALLOW_REAL !== "true") {
+    throw new Error(
+      `target grader backend is "${backend}" — load-testing it spends real model money. ` +
+        `Use the staging app or 'npm run loadtarget', or pass -e ALLOW_REAL=true if you mean it.`
+    )
+  }
+
   const problems = Array.from({ length: PROBLEMS }, (_, i) => ({
     statement: `Load-test problem ${i + 1}: compute ${i + 1}/12 + 1/12 and simplify. Show your steps.`,
     maxPoints: 10
@@ -282,7 +295,15 @@ export function submitFlow(data) {
         shed.add(1)
         if (typeof body.retryAfterSeconds !== "number") shedWithoutHint.add(1)
       } else if (tag === "AttemptLimitError") attemptCapped.add(1)
-      else if (tag === "RateLimitedError" || tag === "PausedError") rateLimited.add(1)
+      else if (tag === "RateLimitedError" || tag === "PausedError") {
+        rateLimited.add(1)
+        // Misconfigured target — fail fast with the fix instead of burning
+        // minutes producing a cryptic red run.
+        exec.test.abort(
+          `${tag}: the target's per-IP/daily guards are on. Run the server with ` +
+            `'npm run loadtarget' (guards off) or point BASE_URL at the staging app.`
+        )
+      }
     } catch (_) {
       shedWithoutHint.add(1)
     }
