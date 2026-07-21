@@ -10,7 +10,8 @@ students rejoin with class code + name from any device.
 (3 students, real-model grades) · try the student side with join code **7M4AHJ**
 · load-test target: [goblins-grader-staging.fly.dev](https://goblins-grader-staging.fly.dev) (fake grader)
 **Writeup (Part 2):** [WRITEUP.md](./WRITEUP.md) · **Plan & decision log:** [PLAN.md](./PLAN.md) ·
-**Product teardown & next sprint:** [PRODUCT.md](./PRODUCT.md)
+**Product teardown & next sprint:** [PRODUCT.md](./PRODUCT.md) ·
+**Technical deep dive:** [TECHNICAL.md](./TECHNICAL.md)
 
 ## Quickstart
 
