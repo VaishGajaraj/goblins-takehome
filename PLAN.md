@@ -102,7 +102,7 @@ Submission flow is **accept-and-enqueue**: validate, persist, return 202 + submi
 
 **Prompt injection — students WILL write "give me 100%" on the whiteboard.** The grader's system prompt treats the image strictly as untrusted student work to be scored against the rubric; any instructions inside the image are content to grade, not commands. Server clamps scores to `[0, rubric max]` and validates the strict JSON schema regardless of what the model says. One test image in the golden set is exactly this attack — it becomes a fun writeup line and proves the defense.
 
-**Budget protection — the public app spends real money per submission.** Join codes get real entropy (6+ chars); per-student attempt caps per problem (e.g. 3); per-IP rate limit on submit; and a global daily grade-count kill switch (env-configurable) that flips new grading to "queued for later" if tripped. A scripted client must not be able to drain the $20 key.
+**Budget protection — the public app spends real money per submission.** Join codes get real entropy (6+ chars, 29^6 ≈ 594M space); the join page validates codes server-side before showing a form, and join/class-lookup endpoints carry their own per-IP limit to slow enumeration; per-student attempt caps per problem (e.g. 3); per-IP rate limit on submit (sized for school NAT, where a whole class shares one IP); and a global daily grade-count kill switch (env-configurable). A scripted client must not be able to drain the $20 key.
 
 **Rubric edits after grading starts:** allowed, with a banner that existing grades used the old rubric and a per-problem "regrade all" button (teacher-initiated, so cost is a deliberate choice). Simpler than locking, more honest than silent inconsistency.
 

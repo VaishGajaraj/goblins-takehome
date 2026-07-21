@@ -141,6 +141,9 @@ async function requestWithTag<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
+export const getClassInfo = (code: string) =>
+  requestWithTag<{ title: string; problemCount: number }>(`/api/class/${encodeURIComponent(code)}`)
+
 export const joinClass = (code: string, name: string, mode?: "resume" | "new") =>
   requestWithTag<JoinResult>("/api/join", {
     method: "POST",

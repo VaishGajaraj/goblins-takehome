@@ -11,7 +11,7 @@ import { AppConfig } from "./Config.js"
 import { DbLive } from "./Db.js"
 import { GraderLive } from "./Grader.js"
 import { GradingQueue, GradingQueueLive, metricsSnapshot } from "./GradingQueue.js"
-import { SubmitRateLimitLive } from "./RateLimit.js"
+import { JoinRateLimitLive, SubmitRateLimitLive } from "./RateLimit.js"
 import { RubricGenLive } from "./RubricGen.js"
 import { StudentLive } from "./StudentApi.js"
 import { TeacherLive } from "./TeacherApi.js"
@@ -97,6 +97,7 @@ const MainLive = HttpLive.pipe(
   Layer.provide(GraderLive),
   Layer.provide(RubricGenLive),
   Layer.provide(SubmitRateLimitLive),
+  Layer.provide(JoinRateLimitLive),
   Layer.provide(DbLive),
   Layer.provide(NodeContext.layer)
 )

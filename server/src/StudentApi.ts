@@ -16,7 +16,7 @@ import {
 } from "./Domain.js"
 import { GradingQueue } from "./GradingQueue.js"
 import { newId } from "./Ids.js"
-import { SubmitRateLimit } from "./RateLimit.js"
+import { JoinRateLimit, SubmitRateLimit } from "./RateLimit.js"
 
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
@@ -47,11 +47,41 @@ const studentSubmissions = (sql: SqlClient.SqlClient, studentId: string) =>
     )
   )
 
+/** Client IP: Fly sets fly-client-ip; fall back for local/dev. */
+const clientIp = (headers: Record<string, string | undefined>): string =>
+  headers["fly-client-ip"] ?? headers["x-forwarded-for"]?.split(",")[0]?.trim() ?? "local"
+
 export const StudentLive = HttpApiBuilder.group(GoblinsApi, "student", (handlers) =>
   handlers
+    .handle("classInfo", ({ path }) =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient
+        const limiter = yield* JoinRateLimit
+        const request = yield* HttpServerRequest.HttpServerRequest
+        if (!(yield* limiter.allow(clientIp(request.headers as Record<string, string | undefined>)))) {
+          return yield* new RateLimitedError({ message: "Too many tries — wait a minute and try again" })
+        }
+        const code = path.code.trim().toUpperCase()
+        const rows = yield* sql`
+          SELECT a.title, COUNT(p.id) AS n
+          FROM assignments a LEFT JOIN problems p ON p.assignment_id = a.id
+          WHERE a.join_code = ${code}
+          GROUP BY a.id`.pipe(Effect.orDie)
+        const a = rows[0]
+        if (a === undefined) {
+          return yield* new NotFoundError({ message: "That class code doesn't match any assignment" })
+        }
+        return { title: a.title as string, problemCount: a.n as number }
+      })
+    )
     .handle("join", ({ payload }) =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient
+        const limiter = yield* JoinRateLimit
+        const request = yield* HttpServerRequest.HttpServerRequest
+        if (!(yield* limiter.allow(clientIp(request.headers as Record<string, string | undefined>)))) {
+          return yield* new RateLimitedError({ message: "Too many tries — wait a minute and try again" })
+        }
         const code = payload.code.trim().toUpperCase()
         const name = payload.name.trim()
 
@@ -132,8 +162,7 @@ export const StudentLive = HttpApiBuilder.group(GoblinsApi, "student", (handlers
         const dataDir = yield* AppConfig.dataDir.pipe(Effect.orDie)
 
         // per-IP budget protection (Fly puts the client IP in fly-client-ip)
-        const headers = request.headers as Record<string, string | undefined>
-        const ip = headers["fly-client-ip"] ?? headers["x-forwarded-for"]?.split(",")[0]?.trim() ?? "local"
+        const ip = clientIp(request.headers as Record<string, string | undefined>)
         if (!(yield* limiter.allow(ip))) {
           return yield* new RateLimitedError({ message: "Whoa, slow down a little — try again in a minute" })
         }

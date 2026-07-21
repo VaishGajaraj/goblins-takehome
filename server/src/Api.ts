@@ -39,10 +39,20 @@ export class GoblinsApi extends HttpApi.make("goblins")
   .add(
     HttpApiGroup.make("student")
       .add(
+        // Public pre-join check: lets the join page reject bad codes before
+        // showing a name form. Exposes nothing beyond title + problem count.
+        HttpApiEndpoint.get("classInfo", "/api/class/:code")
+          .setPath(Schema.Struct({ code: Schema.String }))
+          .addSuccess(Schema.Struct({ title: Schema.String, problemCount: Schema.Number }))
+          .addError(NotFoundError, { status: 404 })
+          .addError(RateLimitedError, { status: 429 })
+      )
+      .add(
         HttpApiEndpoint.post("join", "/api/join")
           .setPayload(JoinPayload)
           .addSuccess(JoinResult)
           .addError(NotFoundError, { status: 404 })
+          .addError(RateLimitedError, { status: 429 })
       )
       .add(
         HttpApiEndpoint.post("submit", "/api/submissions")

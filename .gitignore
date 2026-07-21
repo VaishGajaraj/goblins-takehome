@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# personal interview-prep notes, not part of the submission
+PREP.md
+
 node_modules/
 dist/
 *.db
