@@ -6,6 +6,15 @@
     "server",
     "client"
   ],
+  "overrides": {
+    "@excalidraw/excalidraw": {
+      "nanoid": "3.3.8"
+    },
+    "@excalidraw/mermaid-to-excalidraw": {
+      "nanoid": "5.0.9"
+    },
+    "lodash-es": "4.18.1"
+  },
   "scripts": {
     "dev:server": "npm run dev -w server",
     "dev:client": "npm run dev -w client",

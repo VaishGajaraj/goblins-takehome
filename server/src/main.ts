@@ -1,10 +1,11 @@
 import { HttpApiBuilder, HttpLayerRouter, HttpServerResponse } from "@effect/platform"
 import { NodeContext, NodeHttpServer, NodeRuntime } from "@effect/platform-node"
 import { SqlClient } from "@effect/sql"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Option } from "effect"
 import * as NodeFs from "node:fs"
 import { createServer } from "node:http"
 import * as NodePath from "node:path"
+import { fileURLToPath } from "node:url"
 import { GoblinsApi } from "./Api.js"
 import { AppConfig } from "./Config.js"
 import { DbLive } from "./Db.js"
@@ -47,9 +48,17 @@ const ApiRoutes = HttpLayerRouter.addHttpApi(GoblinsApi, {
  * Serve built client assets; unknown non-API GET paths fall back to
  * index.html so client-side routing works on refresh/deep links.
  */
+/** repo-root/client/dist, anchored to this compiled file (server/dist/main.js) — cwd-independent */
+const defaultStaticDir = NodePath.resolve(
+  NodePath.dirname(fileURLToPath(import.meta.url)),
+  "../../client/dist"
+)
+
 const StaticRoutes = HttpLayerRouter.use((router) =>
   Effect.gen(function* () {
-    const staticDir = NodePath.resolve(yield* AppConfig.staticDir)
+    const staticDir = NodePath.resolve(
+      Option.getOrElse(yield* AppConfig.staticDir, () => defaultStaticDir)
+    )
     const indexPath = NodePath.join(staticDir, "index.html")
     const resolvePath = (rawUrl: string): string => {
       const pathname = decodeURIComponent(new URL(rawUrl, "http://localhost").pathname)
