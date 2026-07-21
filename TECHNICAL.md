@@ -10,7 +10,7 @@ frameworks behind them. Companion to [README.md](./README.md) (quickstart),
 | Layer | Choice | Version | Why |
 |---|---|---|---|
 | Server runtime | Node.js | 22 | native fetch, stable LTS |
-| Server framework | **Effect** (`effect`, `@effect/platform`, `@effect/platform-node`) | 3.22.0 / 0.97.0 / 0.108.0, exact-pinned | Goblins' stack; its primitives (Queue, Stream, Schedule, Schema, Layer) *are* the grading pipeline. v3 pinned because v4 is beta and generated code drifts across the rename boundary |
+| Server framework | **Effect** (`effect`, `@effect/platform`, `@effect/platform-node`) | 3.22.0 / 0.97.0 / 0.108.0, exact-pinned | Goblins' stack; its primitives (Queue, Stream, Schedule, Schema, Layer) map directly onto the grading pipeline. v3 pinned because v4 is beta and generated code drifts across the rename boundary |
 | Persistence | SQLite via `@effect/sql-sqlite-node` (better-sqlite3 underneath) | 0.53.0 | zero-ops on one box; WAL for concurrent readers; the job ledger (see invariants) |
 | Client | React 19 + Vite 6 + react-router 7 | caret | plain client, no Effect on the frontend — the norm for small Effect apps |
 | Whiteboard | `@excalidraw/excalidraw` | 0.18.1 | MIT, pen/eraser/undo/touch built in, `exportToBlob` → PNG |
@@ -103,9 +103,9 @@ rows store paths.
 
 `Grader.grade(input) → { score, feedback, criteriaHits }`.
 
-- **`clamp` (applies to BOTH backends)**: per-criterion award ≤ that
-  criterion's points, total ∈ [0, maxPoints], feedback truncated. The model
-  is never trusted with arithmetic authority.
+- **`clamp` (applies to both backends)**: per-criterion award ≤ that
+  criterion's points, total ∈ [0, maxPoints], feedback truncated. The model's
+  arithmetic is never trusted.
 - **Fake**: `lognormalMs(median, σ)` via Box-Muller (defaults fitted to the
   real model: median 1800ms, σ 0.6), configurable injected retryable-failure
   rate, and `hash01(imagePath)` for stable pseudo-random scores — same
@@ -153,7 +153,7 @@ bad codes before rendering a form.
 timers cleaned on unmount. `Whiteboard.tsx` lazy-loads Excalidraw (its
 chunks dominate the bundle) and exports via
 `exportToBlob({ maxWidthOrHeight: 1024, mimeType: "image/png" })` — the
-1024px cap bounds payload size, image tokens, and cost variance in one move.
+1024px cap bounds payload size, image tokens, and cost variance.
 Identity: `localStorage` per join code, with server-side resume by
 code+name as the cross-device path. `TeacherPage.tsx` polls the report every
 5s; `RubricEditor` keeps local draft state keyed by problem id so polling
@@ -165,9 +165,10 @@ One iteration = one submission: POST (330KB base64 PNG) → 202 → poll to a
 terminal state, recording `time_to_grade`. Profiles: `smoke` (~40s sanity),
 `short` (~4min ship gate: 1 class ramping to 60/min + 10/s×30s herd), `full`
 (~35min, 3 staggered classes), `shed` (20/s deliberate overload, light
-payload). Mechanics that keep it honest — each added after an audit or a
-failed staging run caught the harness lying: **open-model
-`ramping-arrival-rate`** executors (arrivals independent of response times),
+payload). Several guards protect the validity of results; each exists
+because an audit or a failed staging run showed the harness could mislead:
+**open-model `ramping-arrival-rate`** executors (arrivals independent of
+response times),
 **deterministic student×problem cycling** with per-scenario offsets so the
 app's attempt cap can't silently eat load (`attempt_capped==0` gate),
 **`dropped_iterations==0`** (k6 provably offered the scheduled load — this
@@ -188,7 +189,7 @@ concurrently per model, reporting MAE, within-±1 rate, injection scores, and
 p50 latency into `results.json`. This is what demoted flash-lite (MAE 2.5,
 injections scored 10/10) and selected gpt-5-mini as failover.
 
-## Invariants worth remembering
+## Invariants
 
 1. SQLite is the source of truth for job state; the queue only dispatches.
 2. Every model output is schema-validated AND numerically clamped server-side.

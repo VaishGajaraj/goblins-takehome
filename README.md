@@ -48,9 +48,9 @@ React/Vite SPA ──/api──> Effect v3 HttpApi server ──> SQLite (WAL, s
 ```
 
 Submissions are accept-and-enqueue (202 + poll). Job state lives in SQLite, so
-a crash or deploy mid-spike loses nothing — proven by kill-9 test and gated in
-the load suite (`lost_submissions == 0`). Budget guards: 3 attempts per
-problem, per-IP submit limit, daily kill switch.
+a crash or deploy mid-spike loses nothing; this is exercised by a kill-9 test
+and gated in the load suite (`lost_submissions == 0`). Budget guards: 3
+attempts per problem, per-IP submit limit, daily kill switch.
 
 ## Load testing
 

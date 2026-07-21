@@ -1,12 +1,12 @@
 # Product notes: a walkthrough of the grader as it stands
 
-_2026-07-20. I re-read the brief, then went through the entire workflow on the
-deployed app the way a teacher and a student would — plus a fresh-context code
-review of every client page. This is the honest result: what works, what's
-broken or missing, and what the next sprint would be if this were a real
-product. Per the brief's ask to scope under a time budget, these are
-documented rather than built; the one exception is a config fix (join rate
-limit vs school NAT) small and severe enough to ship immediately._
+_2026-07-20. I re-read the brief, went through the entire workflow on the
+deployed app the way a teacher and a student would, and did a fresh-context
+code review of every client page. Below: what works, what's broken or
+missing, and what the next sprint would be if this were a real product.
+Following the brief's premium on scoping, these are documented rather than
+built — with one exception, a config fix (join rate limit vs school NAT)
+small and severe enough to ship immediately._
 
 ## The workflow today (all verified live)
 
@@ -23,9 +23,9 @@ with code + name.
 
 ## Issues found
 
-### Bugs & traps (small, real, fix-first)
+### Bugs and dead ends
 
-1. **The teacher's secret URL is a trap.** We remember created assignments in
+1. **The teacher's report URL is easy to lose forever.** We remember created assignments in
    localStorage (`CreateAssignment.tsx`) but no screen ever reads it back —
    close the tab without bookmarking and the report is unreachable. Fix: a
    "Your assignments" list on the landing page. (Top of the one-liner batch.)
@@ -40,14 +40,14 @@ with code + name.
    a cleared localStorage mid-session can throw on submit instead of
    redirecting to rejoin.
 
-### Teacher trust (the gap that matters most)
+### Teacher trust
 
 5. **Teachers can't see the student's actual work.** The PNG is stored
    server-side but no endpoint serves it, and the grid shows criteria to
-   students only (teachers get a hover tooltip with feedback text — invisible
-   on tablets). For a *grading* product, "click the cell, see the whiteboard
-   next to the rubric breakdown" is the trust feature. This is the first
-   thing I'd build next.
+   students only (teachers get a hover tooltip with feedback text, which is
+   invisible on tablets). For a grading product, clicking a cell and seeing
+   the whiteboard next to the rubric breakdown is what builds trust in the
+   scores. It's the first thing I'd build next.
 6. Attempt history is invisible — the grid shows the latest attempt only, no
    "attempt 2 of 3" marker.
 
@@ -66,8 +66,8 @@ with code + name.
 
 ### Growth & polish
 
-10. **No QR / print view for the join code** — projecting a QR is the real
-    classroom join ritual, and it's a one-day feature.
+10. **No QR / print view for the join code** — projecting a QR is how
+    classrooms actually join things, and it's a one-day feature.
 11. No teacher→teacher share ("send this grader to a colleague") — the CTA
     loop covers teacher→Goblins but not the viral edge the brief cares about.
 12. Static assets ship without cache headers, so the ~1MB Excalidraw chunk
@@ -87,7 +87,8 @@ with code + name.
 ## Next sprint, in order
 
 1. **Teacher submission viewer** — image + per-criterion breakdown + attempt
-   history in a click-open modal (issues 5, 6). The trust product is this.
+   history in a click-open modal (issues 5, 6). Teachers need to see the work
+   behind a score before they'll trust the scores.
 2. **"Your assignments" on landing + copy-link fallback** (1, 2) — kills the
    worst dead end.
 3. **Drawing preservation** — retry restore + refresh survival (7).

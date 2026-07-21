@@ -14,13 +14,13 @@ stays on schedule even when grading slows — exactly what a classroom does.
 | `full` | 3 classes staggered 5 min (ramp 15→25/min each) + 10/s×30s herd | ~35 min | the real testing-day shape |
 | `shed` | deliberate overload: 25/s×30s (≫ ~10/s service rate) | ~5 min | proves graceful shedding + recovery |
 
-Harness honesty guards (each caught by an audit, see PLAN.md round 6):
-deterministic (student × problem) cycling so the app's 3-attempt cap can't
-silently eat load (`attempt_capped==0` gate) · `dropped_iterations==0` so k6
-provably offered the scheduled arrivals (no silent VU throttling) ·
-`gracefulStop: 150s` so tail polls reach terminal states and
-`lost_submissions` is exact · `teardownTimeout: 300s` outlives the 3-min drain
-budget the teardown measures.
+Guards against invalid runs (each added after an audit or a bad staging run;
+see PLAN.md rounds 5–6): deterministic (student × problem) cycling so the
+app's 3-attempt cap can't silently eat load (`attempt_capped==0` gate) ·
+`dropped_iterations==0` so k6 provably offered the scheduled arrivals (no
+silent VU throttling) · `gracefulStop: 150s` so tail polls reach terminal
+states and `lost_submissions` is exact · `teardownTimeout: 300s` outlives the
+3-min drain budget the teardown measures.
 
 ## Running
 
@@ -40,7 +40,6 @@ K6_WEB_DASHBOARD=true K6_WEB_DASHBOARD_EXPORT=report.html k6 run ...
 
 Or trigger the **"Load test" GitHub Action** (workflow_dispatch) — it runs the
 chosen profile against staging and uploads the HTML report as an artifact.
-That's the "re-run as often as we like" button.
 
 ## Ship gates (k6 exits non-zero on breach)
 
