@@ -129,6 +129,39 @@ table.report td.num { font-variant-numeric: tabular-nums; }
 }
 .cta-footer a { color: var(--green-dark); font-weight: 700; }
 
+.chip {
+  background: white; color: var(--green-dark);
+  border: 1.5px solid var(--line); border-radius: 999px;
+  padding: 0.3rem 0.8rem; font-size: 0.85rem; font-weight: 600;
+}
+.chip:hover { background: var(--green-soft); border-color: var(--green); }
+.chip.active { background: var(--green-soft); border-color: var(--green); }
+
+select {
+  font: inherit; border: 1.5px solid var(--line); border-radius: 9px;
+  padding: 0.5rem 0.65rem; background: white; color: var(--ink);
+}
+select:focus { outline: 2px solid var(--green); border-color: var(--green); }
+
+.problem-card {
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 0.7rem 0.8rem; background: #fdfcf9;
+}
+.problem-number {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.6rem; height: 1.6rem; border-radius: 50%;
+  background: var(--green-soft); color: var(--green-dark);
+  font-weight: 800; font-size: 0.85rem;
+}
+.icon-btn {
+  background: transparent; color: var(--ink-soft);
+  border: 1px solid var(--line); border-radius: 7px;
+  padding: 0.15rem 0.5rem; font-size: 0.9rem;
+}
+.icon-btn:hover { background: var(--green-soft); color: var(--green-dark); }
+.icon-btn.danger:hover { background: var(--red-soft); color: var(--red); }
+.icon-btn:disabled { opacity: 0.3; }
+
 @keyframes wiggle {
   0%, 100% { transform: rotate(-6deg); }
   50% { transform: rotate(6deg); }

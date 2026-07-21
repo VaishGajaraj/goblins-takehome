@@ -52,6 +52,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
+export const draftProblems = (topic: string, gradeLevel: string, count: number) =>
+  requestWithTag<{ problems: ProblemInput[] }>("/api/assignments/draft", {
+    method: "POST",
+    body: JSON.stringify({ topic, gradeLevel, count })
+  })
+
 export const createAssignment = (payload: { title: string; problems: ProblemInput[] }) =>
   request<{ id: string; joinCode: string; teacherSecret: string }>("/api/assignments", {
     method: "POST",

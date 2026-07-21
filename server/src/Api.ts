@@ -10,6 +10,7 @@ import {
   MetricsView,
   NotFoundError,
   PausedError,
+  ProblemInput,
   QueueFullError,
   RateLimitedError,
   SubmissionDetail,
@@ -74,6 +75,18 @@ export class GoblinsApi extends HttpApi.make("goblins")
   )
   .add(
     HttpApiGroup.make("teacher")
+      .add(
+        HttpApiEndpoint.post("draftProblems", "/api/assignments/draft")
+          .setPayload(
+            Schema.Struct({
+              topic: Schema.String.pipe(Schema.minLength(2), Schema.maxLength(200)),
+              gradeLevel: Schema.String.pipe(Schema.maxLength(40)),
+              count: Schema.Number.pipe(Schema.int(), Schema.between(1, 10))
+            })
+          )
+          .addSuccess(Schema.Struct({ problems: Schema.Array(ProblemInput) }))
+          .addError(RateLimitedError, { status: 429 })
+      )
       .add(
         HttpApiEndpoint.post("createAssignment", "/api/assignments")
           .setPayload(CreateAssignmentPayload)

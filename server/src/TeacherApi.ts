@@ -1,10 +1,12 @@
-import { HttpApiBuilder } from "@effect/platform"
+import { HttpApiBuilder, HttpServerRequest } from "@effect/platform"
 import { SqlClient } from "@effect/sql"
 import { Effect, Schema } from "effect"
 import { GoblinsApi } from "./Api.js"
-import { NotFoundError, Rubric } from "./Domain.js"
+import { NotFoundError, RateLimitedError, Rubric } from "./Domain.js"
 import { GradingQueue } from "./GradingQueue.js"
 import { newId, newJoinCode, newSecret } from "./Ids.js"
+import { ProblemGen } from "./ProblemGen.js"
+import { JoinRateLimit } from "./RateLimit.js"
 import { RubricGen } from "./RubricGen.js"
 
 const parseRubric = (raw: unknown): Rubric => {
@@ -17,6 +19,28 @@ const parseRubric = (raw: unknown): Rubric => {
 
 export const TeacherLive = HttpApiBuilder.group(GoblinsApi, "teacher", (handlers) =>
   handlers
+    .handle("draftProblems", ({ payload }) =>
+      Effect.gen(function* () {
+        // model call on a public endpoint → per-IP limited (shares the join
+        // limiter budget; drafts are ~$0.001 each in real mode)
+        const limiter = yield* JoinRateLimit
+        const request = yield* HttpServerRequest.HttpServerRequest
+        const headers = request.headers as Record<string, string | undefined>
+        const ip = headers["fly-client-ip"] ?? headers["x-forwarded-for"]?.split(",")[0]?.trim() ?? "local"
+        if (!(yield* limiter.allow(ip))) {
+          return yield* new RateLimitedError({ message: "Too many drafts — give it a minute" })
+        }
+        const gen = yield* ProblemGen
+        const problems = yield* gen
+          .draft({
+            topic: payload.topic.trim(),
+            gradeLevel: payload.gradeLevel.trim(),
+            count: payload.count
+          })
+          .pipe(Effect.orDie) // ProblemGenLive already falls back to templates
+        return { problems: [...problems] }
+      })
+    )
     .handle("createAssignment", ({ payload }) =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient
