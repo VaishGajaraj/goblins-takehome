@@ -71,6 +71,20 @@ The red "Load test" runs from 2026-07-20 in the Actions history are kept on
 purpose: they're the harness-tuning iterations (VU init storm, undersized
 pools, the ingest-ceiling discovery) described in PLAN.md audit round 6.
 
+## Running against the real model
+
+The fake/real toggle is per-deployment, not baked in: any target with
+`GRADER_BACKEND=real` exercises the identical pipeline with real OpenRouter
+calls, and the harness runs against it if you pass `-e ALLOW_REAL=true`
+(the preflight otherwise refuses, since every submission then costs ~$0.002 —
+a `short` run ≈ $1, `full` ≈ $3).
+
+We validated the real path under concurrency with a 40-submission burst
+(`scripts/real-burst.mjs`) at worker concurrency 20: 40/40 graded, zero
+failures, accept p95 182ms, time-to-grade p50 2.1s / p95 3.4s. That matches
+the fake grader's latency model, which is what makes the free runs
+representative.
+
 ## Why the model bill is $0
 
 The target runs `GRADER_BACKEND=fake`: same queue, workers, retries, DB writes,

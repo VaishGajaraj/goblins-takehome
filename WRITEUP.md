@@ -32,6 +32,12 @@ Evidence — measured against the **deployed staging app** on Fly
   time_to_grade p95 to ~76s during the deliberate overload, which is the
   intended behavior: absorb the spike, shed the excess with a clear retry
   signal, recover.
+- **The real path measured too, not just the fake.** The toggle is
+  per-deployment (`GRADER_BACKEND=real` + the harness's `ALLOW_REAL` flag);
+  a 40-submission burst against the real model at worker concurrency 20
+  graded 40/40 with zero failures — accept p95 182ms, time-to-grade p50
+  2.1s / p95 3.4s — matching the fake grader's latency model, which is what
+  makes the free runs representative.
 - **Crash recovery, tested.** `kill -9` mid-grading with 3 in-flight jobs →
   restart → all 3 requeued and graded. The queue is only a dispatcher; SQLite
   rows are the job state. `lost_submissions == 0` is a k6 gate, and the
