@@ -13,9 +13,11 @@ export const AppConfig = {
   openrouterApiKey: Config.option(Config.redacted("OPENROUTER_API_KEY")),
   model: Config.string("OPENROUTER_MODEL").pipe(Config.withDefault("google/gemini-3-flash-preview")),
   /**
-   * Failover model. NOT flash-lite: the golden-set eval (eval/results.json)
-   * showed it awards full marks to prompt-injection images. gpt-5-mini is
-   * slower (~10s) but graded correctly — right tradeoff for a rare failover.
+   * Provisional failover model. NOT flash-lite: the golden-set eval
+   * (eval/results.json) showed it awards full marks to prompt-injection
+   * images. GPT-5 Mini returned correct scores in its two usable cases but
+   * failed to produce usable output in 8/10 attempts, so this fallback still
+   * needs a complete successful evaluation before broad rollout.
    */
   fallbackModel: Config.string("OPENROUTER_FALLBACK_MODEL").pipe(
     Config.withDefault("openai/gpt-5-mini")

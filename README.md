@@ -25,9 +25,10 @@ node scripts/seed.mjs         # optional: seed a sample class, prints teacher/st
 ```
 
 `GRADER_BACKEND=real` switches rubric generation + grading to OpenRouter
-(gemini-3-flash-preview, ~$0.002/grade; failover gpt-5-mini — chosen by the
-[golden-set eval](./eval/results.json), which disqualified flash-lite for
-scoring prompt-injection images 10/10).
+(gemini-3-flash-preview, estimated ~$0.002/grade; gpt-5-mini is configured as a
+provisional fallback). The small [golden-set eval](./eval/results.json)
+disqualified flash-lite for scoring prompt-injection images 10/10, but did not
+yet validate the fallback: only 2/10 GPT-5 Mini attempts produced usable grades.
 
 Dev loop: `npm run dev:server` (tsx watch, :3000) + `npm run dev:client` (vite, :5173, proxies /api).
 

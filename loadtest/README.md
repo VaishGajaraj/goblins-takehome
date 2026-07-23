@@ -1,9 +1,12 @@
 # Load-testing the grading pipeline
 
-One iteration = one student submission: `POST /api/submissions` (329KB PNG, the
-realistic payload) → `202` → poll `GET /api/submissions/:id` with backoff until
-graded. Arrivals are open-model (`ramping-arrival-rate`), so submission rate
-stays on schedule even when grading slows — exactly what a classroom does.
+One submission iteration sends `POST /api/submissions` with a 329KB PNG
+(~439KB after base64 encoding, before JSON overhead). Accepted work receives
+`202` and polls `GET /api/submissions/:id` with backoff until terminal;
+QueueFull `429` iterations return immediately. The observer scenario also
+contributes to k6's total `iterations` count. Arrivals are open-model
+(`ramping-arrival-rate`), so submission rate stays on schedule even when
+grading slows, which better approximates externally timed classroom arrivals.
 
 ## Profiles
 
@@ -12,7 +15,7 @@ stays on schedule even when grading slows — exactly what a classroom does.
 | `smoke` | 2/s steady + 6/s herd blip | ~40s | CI sanity, script check |
 | `short` | 1 class at ~2× pace (ramp to 60/min) + 10/s×30s herd | ~4 min | **default ship gate** |
 | `full` | 3 classes staggered 5 min (ramp 15→25/min each) + 10/s×30s herd | ~35 min | the real testing-day shape |
-| `shed` | deliberate overload: 25/s×30s (≫ ~10/s service rate) | ~5 min | proves graceful shedding + recovery |
+| `shed` | deliberate overload: 20/s×30s (above the fake model's estimated ~9/s service rate) | ~5 min | proves bounded shedding + recovery |
 
 Guards against invalid runs (each added after an audit or a bad staging run;
 see PLAN.md rounds 5–6): deterministic (student × problem) cycling so the
@@ -43,13 +46,17 @@ chosen profile against staging and uploads the HTML report as an artifact.
 
 ## Ship gates (k6 exits non-zero on breach)
 
-Steady-state: submit p95 < 500ms · real-failure rate < 1% (429s are protocol,
-not failures) · time_to_grade p95 < 15s, p99 < 45s. Always: zero lost
-submissions (202'd but never terminal) · every QueueFull 429 carries a
-retry-after hint · zero per-IP/budget-guard trips (staging disables those — the
-load generator is one IP; prod keeps them strict). Herd: gated on graceful shed
-+ **full backlog drain within 3 min** of the spike (checked in teardown), not
-on steady-state latency — absorbing then recovering is the design.
+Steady-state: submit p95 < 500ms · global HTTP failure rate < 1% (429s are
+protocol responses, not failures) · time_to_grade p95 < 15s, p99 < 45s.
+Always: zero accepted submissions without a terminal result in the polling
+window · every QueueFull 429 carries a retry hint · zero per-IP/budget-guard
+trips · zero dropped iterations · no backlog left after the teardown drain
+budget. The `shed` profile must produce at least one QueueFull response.
+
+Current gate limits are documented in [WRITEUP.md](../WRITEUP.md): terminal
+`grade_failed` results are counted but not thresholded; normal profiles do not
+explicitly require zero sheds; and the overload profile does not cap its shed
+rate or replay the client's retry wave.
 
 ## If a run fails
 
@@ -79,17 +86,20 @@ calls, and the harness runs against it if you pass `-e ALLOW_REAL=true`
 (the preflight otherwise refuses, since every submission then costs ~$0.002 —
 a `short` run ≈ $1, `full` ≈ $3).
 
-We validated the real path under concurrency with a 40-submission burst
-(`scripts/real-burst.mjs`) at worker concurrency 20: 40/40 graded, zero
-failures, accept p95 182ms, time-to-grade p50 2.1s / p95 3.4s. That matches
-the fake grader's latency model, which is what makes the free runs
-representative.
+A manual run of [`scripts/real-burst.mjs`](../scripts/real-burst.mjs) against a
+target configured with 20 workers completed 40/40 grades, with recorded accept
+p95 182ms and time-to-grade p50 2.1s / p95 3.4s. The script actually paces the
+40 submissions at about 5/s over eight seconds and uses one 47KB image/problem.
+It is useful latency and integration calibration, not a saturation or sustained
+provider-capacity test; its output is not committed as a result artifact.
 
 ## Why the model bill is $0
 
 The target runs `GRADER_BACKEND=fake`: same queue, workers, retries, DB writes,
 and API surface — only the paid OpenRouter call is replaced by a lognormal
 latency sample (median 1.8s, σ 0.6, tail ~10s, 2% injected retryable failures),
-parameters fitted to the real-model smoke test in PLAN.md. Capacity math to
-interpret results: throughput ≈ GRADER_CONCURRENCY / avg grade latency ≈
-20 / 2s ≈ 10 grades/s ≈ 600/min — 3-class steady peak is ~75/min, herd is 10/s.
+loosely calibrated against the small real-model run. A lognormal distribution
+with those parameters averages about 2.15s; including the injected retry rate,
+20 workers imply roughly **9 grades/s (~550/min)** before application overhead.
+That is a model-derived estimate, not measured sustained throughput. The
+staggered three-class schedule peaks near 63/min; the deliberate herd is 10/s.

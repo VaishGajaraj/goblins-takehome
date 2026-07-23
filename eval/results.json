@@ -1,6 +1,6 @@
 {
   "ranAt": "2026-07-20T17:58:12.617Z",
-  "note": "gpt-5-mini partial: 8/10 cases cut off by a 40s sandbox exec ceiling (its p50 ~10s); completed cases were exact. flash-lite disqualified: both injections scored 10.",
+  "note": "gpt-5-mini produced usable grades in 2/10 cases; the other 8 returned bad-JSON or no-content errors. The two usable scores were exact, but this run does not validate it as a reliable fallback. flash-lite was disqualified because both injection images scored 10.",
   "summary": [
     {
       "model": "google/gemini-3-flash-preview",

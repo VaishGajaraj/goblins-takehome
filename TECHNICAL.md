@@ -14,7 +14,7 @@ frameworks behind them. Companion to [README.md](./README.md) (quickstart),
 | Persistence | SQLite via `@effect/sql-sqlite-node` (better-sqlite3 underneath) | 0.53.0 | zero-ops on one box; WAL for concurrent readers; the job ledger (see invariants) |
 | Client | React 19 + Vite 6 + react-router 7 | caret | plain client, no Effect on the frontend — the norm for small Effect apps |
 | Whiteboard | `@excalidraw/excalidraw` | 0.18.1 | MIT, pen/eraser/undo/touch built in, `exportToBlob` → PNG |
-| Models | OpenRouter (OpenAI-compatible API) | — | `google/gemini-3-flash-preview` primary, `openai/gpt-5-mini` failover (eval-driven; see eval section) |
+| Models | OpenRouter (OpenAI-compatible API) | — | `google/gemini-3-flash-preview` primary; `openai/gpt-5-mini` is configured as a provisional failover but its recorded eval was only 2/10 usable |
 | Load testing | Grafana k6 | 2.x | open-model arrival executors, thresholds as CI exit codes |
 | Hosting | Fly.io, 2 apps (prod real / staging fake), 1 machine each + 1GB volume | — | always-on stateful process + disk is the native primitive |
 | CI/CD | GitHub Actions | — | `deploy.yml` (push → both apps), `loadtest.yml` (dispatch → k6 vs staging, HTML artifact) |
@@ -52,8 +52,9 @@ HttpLive (HttpLayerRouter.serve)
  └─ NodeContext.layer (FileSystem/Path for static serving)
 ```
 
-Ordering matters once: **workers are up before HTTP listens**, so the boot
-requeue can never race incoming submissions.
+Ordering matters once: **workers are up before recovery starts**, so a backlog
+larger than the queue can drain while it is re-offered. Recovery is forked and
+may interleave with new HTTP admissions; SQLite remains the durable job ledger.
 
 ### `Api.ts` + `Domain.ts` — the typed surface
 
@@ -91,8 +92,10 @@ rows store paths.
   worker stream.
 - **Worker pool**: `Stream.fromQueue(queue).pipe(Stream.mapEffect(gradeOne,
   { concurrency: GRADER_CONCURRENCY }), Stream.runDrain)` forked into the
-  layer's scope. Throughput ≈ concurrency ÷ avg grade latency (20 ÷ ~2s ≈
-  10/s).
+  layer's scope. Throughput ≈ concurrency ÷ mean grade latency. With the
+  staging fake's lognormal parameters and retry rate, 20 workers imply roughly
+  9/s before application overhead; this is a model estimate, not sustained
+  measured throughput.
 - **Boot requeue**: `SELECT id WHERE status IN ('queued','grading')` →
   `enqueueWait` each, forked so HTTP starts immediately while a large
   backlog trickles in.
@@ -103,9 +106,10 @@ rows store paths.
 
 `Grader.grade(input) → { score, feedback, criteriaHits }`.
 
-- **`clamp` (applies to both backends)**: per-criterion award ≤ that
-  criterion's points, total ∈ [0, maxPoints], feedback truncated. The model's
-  arithmetic is never trusted.
+- **`clamp` (applies to both backends)**: per-criterion awards are bounded,
+  total score is bounded to `[0, maxPoints]`, and feedback is truncated. The
+  current implementation does not recompute the total from criterion awards;
+  stable criterion IDs plus a server-computed total are a production follow-up.
 - **Fake**: `lognormalMs(median, σ)` via Box-Muller (defaults fitted to the
   real model: median 1800ms, σ 0.6), configurable injected retryable-failure
   rate, and `hash01(imagePath)` for stable pseudo-random scores — same
@@ -190,8 +194,10 @@ problems) rendered by `make-fixtures.py` with pinned ground truth.
 `run-eval.mjs` imports **the production `makeRealGrade`** (same prompt,
 schema, clamping — no eval-only code path) and grades all fixtures
 concurrently per model, reporting MAE, within-±1 rate, injection scores, and
-p50 latency into `results.json`. This is what demoted flash-lite (MAE 2.5,
-injections scored 10/10) and selected gpt-5-mini as failover.
+p50 latency into `results.json`. This demoted flash-lite (MAE 2.5, injections
+scored 10/10). GPT-5 Mini matched the two cases that produced usable grades,
+but 8/10 attempts were unusable, so the recorded run does not validate it as a
+reliable failover yet.
 
 ## Invariants
 
