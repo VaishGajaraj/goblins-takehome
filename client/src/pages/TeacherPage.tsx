@@ -1,13 +1,118 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useParams } from "react-router-dom"
 import {
+  getTeacherSubmission,
   getTeacherView,
   regradeFailed,
   updateRubric,
   type Rubric,
   type SubmissionSummary,
+  type TeacherSubmissionAttempt,
+  type TeacherSubmissionDetail,
   type TeacherView
 } from "../api"
+
+type InspectorState =
+  | { kind: "loading"; id: string }
+  | { kind: "ready"; id: string; detail: TeacherSubmissionDetail }
+  | { kind: "error"; id: string; message: string }
+
+function SubmissionInspector(props: { detail: TeacherSubmissionDetail; onClose: () => void }) {
+  const initial =
+    props.detail.attempts.find((attempt) => attempt.id === props.detail.selectedSubmissionId) ??
+    props.detail.attempts.at(-1)
+  const [selectedId, setSelectedId] = useState(initial?.id ?? "")
+  const selected = props.detail.attempts.find((attempt) => attempt.id === selectedId) ?? initial
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") props.onClose()
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [props])
+
+  return (
+    <div
+      className="modal-backdrop"
+      onMouseDown={(event) => {
+        if (event.currentTarget === event.target) props.onClose()
+      }}
+    >
+      <section className="submission-modal" role="dialog" aria-modal="true" aria-labelledby="submission-title">
+        <div className="row modal-heading">
+          <div className="grow">
+            <h2 id="submission-title">
+              {props.detail.student.name} · Problem {props.detail.problem.position + 1}
+            </h2>
+            <p className="soft">{props.detail.problem.statement}</p>
+          </div>
+          <button className="icon-btn" onClick={props.onClose} aria-label="Close submission details">✕</button>
+        </div>
+
+        {props.detail.attempts.length > 1 && (
+          <div className="row attempt-tabs" aria-label="Attempts">
+            {props.detail.attempts.map((attempt) => (
+              <button
+                className={attempt.id === selected?.id ? "subtle" : "ghost"}
+                key={attempt.id}
+                onClick={() => setSelectedId(attempt.id)}
+              >
+                Attempt {attempt.attempt}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {selected ? (
+          <AttemptReview attempt={selected} maxPoints={props.detail.problem.maxPoints} />
+        ) : (
+          <div className="empty">No attempt details are available.</div>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function AttemptReview(props: { attempt: TeacherSubmissionAttempt; maxPoints: number }) {
+  const { attempt } = props
+  return (
+    <div className="submission-review">
+      <div className="work-preview">
+        <h3>Student work</h3>
+        {attempt.imageBase64 ? (
+          <img src={`data:image/png;base64,${attempt.imageBase64}`} alt={`Submitted work, attempt ${attempt.attempt}`} />
+        ) : (
+          <div className="empty">The submitted image is unavailable.</div>
+        )}
+      </div>
+      <div className="grade-detail">
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <h3>Grade details</h3>
+          <span className={`badge ${attempt.status}`}>{attempt.status}</span>
+        </div>
+        {attempt.score !== null && (
+          <div className="inspector-score">{attempt.score} / {props.maxPoints}</div>
+        )}
+        {attempt.feedback && <p>{attempt.feedback}</p>}
+        {attempt.criteriaHits && attempt.criteriaHits.length > 0 && (
+          <ul className="criteria-list">
+            {attempt.criteriaHits.map((criterion, index) => (
+              <li className="row" key={`${criterion.criterion}:${index}`}>
+                <span aria-hidden>{criterion.met ? "✓" : "–"}</span>
+                <span className="grow">{criterion.criterion}</span>
+                <strong>{criterion.pointsAwarded} pts</strong>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="soft inspector-time">
+          Submitted {new Date(attempt.createdAt * 1000).toLocaleString()}
+        </p>
+      </div>
+    </div>
+  )
+}
 
 function RubricEditor(props: {
   secret: string
@@ -95,6 +200,8 @@ export function TeacherPage() {
   const [view, setView] = useState<TeacherView | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [copyFailed, setCopyFailed] = useState(false)
+  const [inspector, setInspector] = useState<InspectorState | null>(null)
 
   const refresh = useCallback(async () => {
     try {
@@ -135,6 +242,16 @@ export function TeacherPage() {
     return m
   }, [view, byStudentProblem])
 
+  const inspectSubmission = async (id: string) => {
+    setInspector({ kind: "loading", id })
+    try {
+      const detail = await getTeacherSubmission(secret, id)
+      setInspector((current) => current?.id === id ? { kind: "ready", id, detail } : current)
+    } catch (e) {
+      setInspector((current) => current?.id === id ? { kind: "error", id, message: String(e) } : current)
+    }
+  }
+
   if (error && !view) {
     return <div className="card"><h1>Hmm.</h1><p className="soft">{error}</p></div>
   }
@@ -153,18 +270,31 @@ export function TeacherPage() {
         </p>
         <div className="row" style={{ flexWrap: "wrap" }}>
           <span className="join-code">{view.joinCode}</span>
+          <input
+            className="share-link"
+            value={joinUrl}
+            readOnly
+            aria-label="Student join link"
+            onFocus={(event) => event.currentTarget.select()}
+          />
           <button
             className="ghost"
             onClick={() => {
+              setCopyFailed(false)
+              if (!navigator.clipboard) {
+                setCopyFailed(true)
+                return
+              }
               void navigator.clipboard.writeText(joinUrl).then(() => {
                 setCopied(true)
                 setTimeout(() => setCopied(false), 1500)
-              })
+              }).catch(() => setCopyFailed(true))
             }}
           >
             {copied ? "Copied!" : "Copy student link"}
           </button>
         </div>
+        {copyFailed && <p className="soft">Copy is unavailable here. Select the link above and copy it manually.</p>}
       </div>
 
       <div className="card">
@@ -207,14 +337,28 @@ export function TeacherPage() {
                       total += s.score
                       anyGraded = true
                       return (
-                        <td key={p.id} className="num" title={s.feedback ?? ""}>
-                          {s.score}/{p.maxPoints}
+                        <td key={p.id} className="num">
+                          <button
+                            className="report-cell"
+                            onClick={() => void inspectSubmission(s.id)}
+                            aria-label={`Review ${st.name}'s work for problem ${p.position + 1}`}
+                          >
+                            {s.score}/{p.maxPoints}
+                          </button>
                         </td>
                       )
                     }
                     return (
                       <td key={p.id}>
-                        {s ? <span className={`badge ${s.status}`}>{s.status}</span> : <span className="soft">—</span>}
+                        {s ? (
+                          <button
+                            className="report-cell"
+                            onClick={() => void inspectSubmission(s.id)}
+                            aria-label={`Review ${st.name}'s work for problem ${p.position + 1}`}
+                          >
+                            <span className={`badge ${s.status}`}>{s.status}</span>
+                          </button>
+                        ) : <span className="soft">—</span>}
                       </td>
                     )
                   })
@@ -270,6 +414,29 @@ export function TeacherPage() {
         Like this? The full <a href="https://goblinsapp.com" target="_blank" rel="noreferrer">Goblins experience</a>{" "}
         gives your students real-time feedback while they work — this grader is just the beginning.
       </div>
+
+      {inspector?.kind === "loading" && (
+        <div className="modal-backdrop">
+          <div className="submission-modal empty" role="status">Opening student work…</div>
+        </div>
+      )}
+      {inspector?.kind === "error" && (
+        <div className="modal-backdrop" onMouseDown={() => setInspector(null)}>
+          <div className="submission-modal" role="alert" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="row">
+              <p className="grow">Could not open this submission. {inspector.message}</p>
+              <button className="ghost" onClick={() => setInspector(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {inspector?.kind === "ready" && (
+        <SubmissionInspector
+          key={inspector.detail.selectedSubmissionId}
+          detail={inspector.detail}
+          onClose={() => setInspector(null)}
+        />
+      )}
     </div>
   )
 }

@@ -1,8 +1,11 @@
 import { HttpApiBuilder, HttpServerRequest } from "@effect/platform"
 import { SqlClient } from "@effect/sql"
 import { Effect, Schema } from "effect"
+import * as NodeFsPromises from "node:fs/promises"
+import * as NodePath from "node:path"
 import { GoblinsApi } from "./Api.js"
-import { NotFoundError, RateLimitedError, Rubric } from "./Domain.js"
+import { AppConfig } from "./Config.js"
+import { CriteriaHits, NotFoundError, RateLimitedError, Rubric } from "./Domain.js"
 import { GradingQueue } from "./GradingQueue.js"
 import { newId, newJoinCode, newSecret } from "./Ids.js"
 import { ProblemGen } from "./ProblemGen.js"
@@ -16,6 +19,40 @@ const parseRubric = (raw: unknown): Rubric => {
     return []
   }
 }
+
+const parseCriteriaHits = (raw: unknown): typeof CriteriaHits.Type | null => {
+  try {
+    return Schema.decodeUnknownSync(CriteriaHits)(typeof raw === "string" ? JSON.parse(raw) : raw)
+  } catch {
+    return null
+  }
+}
+
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+
+/**
+ * Read only the immutable PNG path allocated for this submission. A stale,
+ * missing, oversized, or tampered DB path is represented as null instead of
+ * leaking a filesystem error or allowing an arbitrary file read.
+ */
+const readSubmissionPng = (dataDir: string, submissionId: string, rawPath: unknown) =>
+  Effect.promise(async (): Promise<string | null> => {
+    if (typeof rawPath !== "string") return null
+    const expectedPath = NodePath.resolve(dataDir, "images", `${submissionId}.png`)
+    const imagePath = NodePath.resolve(rawPath)
+    if (imagePath !== expectedPath) return null
+    try {
+      const stat = await NodeFsPromises.lstat(imagePath)
+      if (stat.isSymbolicLink() || !stat.isFile() || stat.size < PNG_MAGIC.length || stat.size > 2_100_000) {
+        return null
+      }
+      const png = await NodeFsPromises.readFile(imagePath)
+      if (!png.subarray(0, PNG_MAGIC.length).equals(PNG_MAGIC)) return null
+      return png.toString("base64")
+    } catch {
+      return null
+    }
+  })
 
 export const TeacherLive = HttpApiBuilder.group(GoblinsApi, "teacher", (handlers) =>
   handlers
@@ -98,7 +135,7 @@ export const TeacherLive = HttpApiBuilder.group(GoblinsApi, "teacher", (handlers
           FROM submissions s
           JOIN students st ON st.id = s.student_id
           WHERE st.assignment_id = ${id}
-          ORDER BY s.created_at`.pipe(Effect.orDie)
+          ORDER BY s.created_at, s.attempt`.pipe(Effect.orDie)
 
         return {
           id,
@@ -127,6 +164,68 @@ export const TeacherLive = HttpApiBuilder.group(GoblinsApi, "teacher", (handlers
             createdAt: s.created_at as number,
             gradedAt: (s.graded_at ?? null) as number | null
           }))
+        }
+      })
+    )
+    .handle("teacherSubmission", ({ path }) =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient
+        const dataDir = yield* AppConfig.dataDir.pipe(Effect.orDie)
+
+        // The secret, selected submission, student, and problem must all meet
+        // in the same assignment. This both authenticates and scopes history.
+        const selected = yield* sql`
+          SELECT st.id AS student_id, st.name AS student_name, st.created_at AS student_created_at,
+                 p.id AS problem_id, p.position, p.statement, p.max_points, p.rubric
+          FROM submissions selected
+          JOIN students st ON st.id = selected.student_id
+          JOIN problems p ON p.id = selected.problem_id AND p.assignment_id = st.assignment_id
+          JOIN assignments a ON a.id = st.assignment_id
+          WHERE selected.id = ${path.submissionId}
+            AND a.teacher_secret = ${path.secret}`.pipe(Effect.orDie)
+        const context = selected[0]
+        if (context === undefined) {
+          return yield* new NotFoundError({ message: "No such submission for that link" })
+        }
+
+        const attempts = yield* sql`
+          SELECT id, attempt, status, score, feedback, criteria_hits,
+                 created_at, graded_at, image_path
+          FROM submissions
+          WHERE student_id = ${context.student_id} AND problem_id = ${context.problem_id}
+          ORDER BY attempt`.pipe(Effect.orDie)
+
+        const attemptDetails = yield* Effect.forEach(attempts, (attempt) =>
+          readSubmissionPng(dataDir, attempt.id as string, attempt.image_path).pipe(
+            Effect.map((imageBase64) => ({
+              id: attempt.id as string,
+              attempt: attempt.attempt as number,
+              status: attempt.status as "queued" | "grading" | "graded" | "failed",
+              score: (attempt.score ?? null) as number | null,
+              feedback: (attempt.feedback ?? null) as string | null,
+              criteriaHits: parseCriteriaHits(attempt.criteria_hits),
+              createdAt: attempt.created_at as number,
+              gradedAt: (attempt.graded_at ?? null) as number | null,
+              imageBase64
+            }))
+          )
+        )
+
+        return {
+          selectedSubmissionId: path.submissionId,
+          student: {
+            id: context.student_id as string,
+            name: context.student_name as string,
+            createdAt: context.student_created_at as number
+          },
+          problem: {
+            id: context.problem_id as string,
+            position: context.position as number,
+            statement: context.statement as string,
+            maxPoints: context.max_points as number,
+            rubric: parseRubric(context.rubric)
+          },
+          attempts: attemptDetails
         }
       })
     )

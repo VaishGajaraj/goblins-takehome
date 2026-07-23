@@ -34,7 +34,7 @@ const errorText = (e: unknown): string => {
 const studentSubmissions = (sql: SqlClient.SqlClient, studentId: string) =>
   sql`
     SELECT id, problem_id, attempt, status, score, feedback
-    FROM submissions WHERE student_id = ${studentId} ORDER BY created_at`.pipe(
+    FROM submissions WHERE student_id = ${studentId} ORDER BY created_at, attempt`.pipe(
     Effect.map((rows) =>
       rows.map((s) => ({
         id: s.id as string,

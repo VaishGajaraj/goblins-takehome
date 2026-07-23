@@ -8,20 +8,28 @@ type ExAPI = {
   getSceneElements: () => readonly unknown[]
   getAppState: () => Record<string, unknown>
   getFiles: () => unknown
-  resetScene: () => void
+}
+
+export type WhiteboardScene = {
+  elements: readonly unknown[]
+  appState: Record<string, unknown>
+  files: unknown
 }
 
 export type WhiteboardHandle = {
   /** PNG capped at 1024px on the long edge (cost + payload control, see PLAN.md). */
   exportPng: () => Promise<Blob | null>
-  clear: () => void
+  snapshot: () => WhiteboardScene | null
 }
 
 /**
  * Default export is the Excalidraw canvas; kept in its own module so the whole
  * dependency lazy-loads (it's the biggest chunk in the app).
  */
-export default function Whiteboard(props: { onReady: (handle: WhiteboardHandle) => void }) {
+export default function Whiteboard(props: {
+  onReady: (handle: WhiteboardHandle) => void
+  initialScene?: WhiteboardScene
+}) {
   const apiRef = useRef<ExAPI | null>(null)
 
   const onApi = useCallback(
@@ -41,7 +49,15 @@ export default function Whiteboard(props: { onReady: (handle: WhiteboardHandle) 
             mimeType: "image/png"
           })
         },
-        clear: () => apiRef.current?.resetScene()
+        snapshot: () => {
+          const a = apiRef.current
+          if (!a) return null
+          return {
+            elements: a.getSceneElements(),
+            appState: a.getAppState(),
+            files: a.getFiles()
+          }
+        }
       })
     },
     [props]
@@ -51,6 +67,7 @@ export default function Whiteboard(props: { onReady: (handle: WhiteboardHandle) 
     <div style={{ height: "52vh", minHeight: 340, borderRadius: 12, overflow: "hidden", border: "1.5px solid var(--line)" }}>
       <Excalidraw
         excalidrawAPI={onApi}
+        initialData={props.initialScene as never}
         theme="light"
         UIOptions={{
           canvasActions: {

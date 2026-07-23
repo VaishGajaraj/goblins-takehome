@@ -11,7 +11,7 @@ import {
   type ProblemForStudent,
   type SubmissionForStudent
 } from "../api"
-import type { WhiteboardHandle } from "./Whiteboard"
+import type { WhiteboardHandle, WhiteboardScene } from "./Whiteboard"
 
 const Whiteboard = lazy(() => import("./Whiteboard"))
 
@@ -39,6 +39,7 @@ export function WorkPage() {
   const [submitting, setSubmitting] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [totals, setTotals] = useState<Map<string, SubmissionForStudent>>(new Map())
+  const [retryScenes, setRetryScenes] = useState<Map<string, WhiteboardScene>>(new Map())
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // always points at the latest submit closure — the QueueFull auto-retry uses
@@ -54,6 +55,12 @@ export function WorkPage() {
     },
     []
   )
+
+  // A board handle belongs to one mounted Excalidraw instance. Drop it while
+  // waiting/reviewing so a later problem can never submit through a stale one.
+  useEffect(() => {
+    if (phase.kind !== "drawing") setBoard(null)
+  }, [phase.kind])
 
   const ATTEMPT_CAP = 3
 
@@ -171,6 +178,10 @@ export function WorkPage() {
         setSubmitting(false)
         return
       }
+      const scene = board.snapshot()
+      if (scene) {
+        setRetryScenes((scenes) => new Map(scenes).set(phase.problem.id, scene))
+      }
       const base64 = await new Promise<string>((resolve, reject) => {
         const r = new FileReader()
         r.onload = () => resolve((r.result as string).split(",", 2)[1] ?? "")
@@ -178,7 +189,6 @@ export function WorkPage() {
         r.readAsDataURL(blob)
       })
       const res = await submitWork(stored!.studentId, phase.problem.id, base64)
-      board.clear()
       setPhase({ kind: "waiting", problem: phase.problem, submissionId: res.submissionId, sinceMs: Date.now() })
     } catch (e) {
       if (e instanceof ApiError && e.tag === "QueueFullError") {
@@ -249,8 +259,23 @@ export function WorkPage() {
         <p>
           {gradedAll
             ? `${got} out of ${max} points on "${joined.assignmentTitle}".`
-            : `Your work on "${joined.assignmentTitle}" is in — some grades are still cooking.`}
+            : `Your work on "${joined.assignmentTitle}" is in — your teacher will review anything the goblin couldn't grade.`}
         </p>
+        <div className="student-recap" aria-label="Assignment score recap">
+          {joined.problems.map((problem) => {
+            const submission = totals.get(problem.id)
+            return (
+              <div className="row" key={problem.id}>
+                <strong className="grow">Problem {problem.position + 1}</strong>
+                {submission?.status === "graded" && submission.score !== null ? (
+                  <span>{submission.score} / {problem.maxPoints}</span>
+                ) : (
+                  <span className="badge failed">Teacher review</span>
+                )}
+              </div>
+            )
+          })}
+        </div>
         <p className="soft">
           Every step you showed helps you learn. Ask your teacher about anything that surprised you!
         </p>
@@ -337,7 +362,11 @@ export function WorkPage() {
       {notice && <div className="error-banner">{notice}</div>}
       <div className="card">
         <Suspense fallback={<div className="empty">Rolling out the whiteboard…</div>}>
-          <Whiteboard onReady={setBoard} />
+          <Whiteboard
+            key={`${phase.problem.id}:${phase.attempt}`}
+            initialScene={retryScenes.get(phase.problem.id)}
+            onReady={setBoard}
+          />
         </Suspense>
         <div className="row" style={{ marginTop: "0.75rem", justifyContent: "flex-end" }}>
           <button onClick={() => void submit()} disabled={!board || submitting}>

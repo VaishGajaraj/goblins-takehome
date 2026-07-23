@@ -40,6 +40,25 @@ export type TeacherView = {
   submissions: SubmissionSummary[]
 }
 
+export type TeacherSubmissionAttempt = {
+  id: string
+  attempt: number
+  status: SubmissionStatus
+  score: number | null
+  feedback: string | null
+  criteriaHits: CriteriaHit[] | null
+  createdAt: number
+  gradedAt: number | null
+  imageBase64: string | null
+}
+
+export type TeacherSubmissionDetail = {
+  selectedSubmissionId: string
+  student: StudentView
+  problem: ProblemView
+  attempts: TeacherSubmissionAttempt[]
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     headers: { "Content-Type": "application/json" },
@@ -66,6 +85,11 @@ export const createAssignment = (payload: { title: string; problems: ProblemInpu
 
 export const getTeacherView = (secret: string) =>
   request<TeacherView>(`/api/teacher/${encodeURIComponent(secret)}`)
+
+export const getTeacherSubmission = (secret: string, submissionId: string) =>
+  request<TeacherSubmissionDetail>(
+    `/api/teacher/${encodeURIComponent(secret)}/submissions/${encodeURIComponent(submissionId)}`
+  )
 
 export const regradeFailed = (secret: string) =>
   request<{ requeued: number }>(`/api/teacher/${encodeURIComponent(secret)}/regrade-failed`, {

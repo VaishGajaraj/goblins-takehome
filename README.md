@@ -2,7 +2,8 @@
 
 Teachers create a math assignment, students show their work on a whiteboard,
 a vision model grades it against a teacher-editable rubric, and the teacher
-watches a live class report. No accounts: teachers hold a secret link,
+watches a live class report with every whiteboard and scoring decision one
+click away. No accounts: teachers hold a secret link,
 students rejoin with class code + name from any device.
 
 **Live demo:** [goblins-grader.fly.dev](https://goblins-grader.fly.dev) — or jump straight to the
@@ -34,8 +35,9 @@ Dev loop: `npm run dev:server` (tsx watch, :3000) + `npm run dev:client` (vite, 
 
 ```
 React/Vite SPA ──/api──> Effect v3 HttpApi server ──> SQLite (WAL, source of truth)
- teacher: create → edit rubric → report        │        images on disk
- student: join → Excalidraw → submit → poll    ▼
+ teacher: create → edit rubric → report → inspect attempts + work
+ student: join → Excalidraw → submit → poll    │        images on disk
+                                                ▼
                                 bounded Queue (dispatcher only)
                                 full → 429 + retry hint
                                         │

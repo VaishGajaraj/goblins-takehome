@@ -11,6 +11,14 @@ export type RubricCriterion = typeof RubricCriterion.Type
 export const Rubric = Schema.Array(RubricCriterion).pipe(Schema.maxItems(10))
 export type Rubric = typeof Rubric.Type
 
+export const CriteriaHits = Schema.Array(
+  Schema.Struct({
+    criterion: Schema.String,
+    met: Schema.Boolean,
+    pointsAwarded: Schema.Number
+  })
+)
+
 // ---------- assignment creation ----------
 
 export const ProblemInput = Schema.Struct({
@@ -65,6 +73,26 @@ export const TeacherView = Schema.Struct({
   problems: Schema.Array(ProblemView),
   students: Schema.Array(StudentView),
   submissions: Schema.Array(SubmissionSummary)
+})
+
+export const TeacherSubmissionAttempt = Schema.Struct({
+  id: Schema.String,
+  attempt: Schema.Number,
+  status: Schema.Literal("queued", "grading", "graded", "failed"),
+  score: Schema.NullOr(Schema.Number),
+  feedback: Schema.NullOr(Schema.String),
+  criteriaHits: Schema.NullOr(CriteriaHits),
+  createdAt: Schema.Number,
+  gradedAt: Schema.NullOr(Schema.Number),
+  /** PNG bytes encoded as base64; null only when the stored image is unavailable or invalid. */
+  imageBase64: Schema.NullOr(Schema.String)
+})
+
+export const TeacherSubmissionDetail = Schema.Struct({
+  selectedSubmissionId: Schema.String,
+  student: StudentView,
+  problem: ProblemView,
+  attempts: Schema.Array(TeacherSubmissionAttempt)
 })
 
 export const UpdateRubricPayload = Schema.Struct({
@@ -122,14 +150,6 @@ export const SubmitResult = Schema.Struct({
   submissionId: Schema.String,
   attempt: Schema.Number
 })
-
-export const CriteriaHits = Schema.Array(
-  Schema.Struct({
-    criterion: Schema.String,
-    met: Schema.Boolean,
-    pointsAwarded: Schema.Number
-  })
-)
 
 export const SubmissionDetail = Schema.Struct({
   id: Schema.String,

@@ -16,6 +16,7 @@ import {
   SubmissionDetail,
   SubmitPayload,
   SubmitResult,
+  TeacherSubmissionDetail,
   TeacherView,
   UpdateRubricPayload
 } from "./Domain.js"
@@ -96,6 +97,12 @@ export class GoblinsApi extends HttpApi.make("goblins")
         HttpApiEndpoint.get("teacherView", "/api/teacher/:secret")
           .setPath(Schema.Struct({ secret: Schema.String }))
           .addSuccess(TeacherView)
+          .addError(NotFoundError, { status: 404 })
+      )
+      .add(
+        HttpApiEndpoint.get("teacherSubmission", "/api/teacher/:secret/submissions/:submissionId")
+          .setPath(Schema.Struct({ secret: Schema.String, submissionId: Schema.String }))
+          .addSuccess(TeacherSubmissionDetail)
           .addError(NotFoundError, { status: 404 })
       )
       .add(

@@ -41,7 +41,7 @@ Effect apps are wired as **Layers** (dependency-injected services).
 HttpLive (HttpLayerRouter.serve)
  ├─ ApiRoutes = HttpLayerRouter.addHttpApi(GoblinsApi)   ← typed API surface
  │    ├─ SystemLive   (health, metrics)
- │    ├─ TeacherLive  (draft, create, view, rubric, regrade)
+ │    ├─ TeacherLive  (draft, create, view, inspect work, rubric, regrade)
  │    └─ StudentLive  (classInfo, join, submit, poll)
  ├─ StaticRoutes      (SPA files + index.html fallback, cwd-independent)
  ├─ GradingQueueLive  (bounded queue + worker pool + boot requeue)
@@ -156,8 +156,12 @@ chunks dominate the bundle) and exports via
 1024px cap bounds payload size, image tokens, and cost variance.
 Identity: `localStorage` per join code, with server-side resume by
 code+name as the cross-device path. `TeacherPage.tsx` polls the report every
-5s; `RubricEditor` keeps local draft state keyed by problem id so polling
-doesn't clobber edits.
+5s; each populated cell opens a teacher-secret-scoped inspector containing
+the validated PNG, criterion decisions, feedback, and all attempts for that
+student/problem. `RubricEditor` keeps local draft state keyed by problem id
+so polling doesn't clobber edits. Before submission, the whiteboard scene is
+snapshotted in memory and restored as editable Excalidraw data when the
+student retries.
 
 ## Load-test harness (`loadtest/scenario.js`)
 
